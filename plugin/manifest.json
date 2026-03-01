@@ -1,0 +1,142 @@
+{
+  "id": "Test-j0n49y",
+  "name": "Panel tool test",
+  "version": "1.0.0",
+  "main": "index.html",
+  "manifestVersion": 5,
+  "host": {
+    "app": "PS",
+    "minVersion": "27.4.0"
+  },
+  "requiredPermissions": {
+    "allowCodeGenerationFromStrings": true,
+    "launchProcess": {
+      "schemes": [
+        "http",
+        "https"
+      ],
+      "extensions": [
+        ".svg",
+        ".png"
+      ]
+    },
+    "webview": {
+      "allow": "yes",
+      "domains": [
+        "https://*.adobe.com",
+        "https://*.google.com"
+      ]
+    },
+    "localFileSystem": "fullAccess",
+    "network": {
+      "domains": "all"
+    },
+    "ipc": {
+      "enablePluginCommunication": true
+    }
+  },
+  "entrypoints": [
+    {
+      "type": "command",
+      "id": "showAbout",
+      "label": {
+        "default": "About React Demo"
+      },
+      "shortcut": {
+        "mac": "shift+cmd+A",
+        "win": "ctrl+alt+A"
+      }
+    },
+    {
+      "type": "panel",
+      "id": "demos",
+      "label": {
+        "default": "Nano Banana Pro"
+      },
+      "minimumSize": {
+        "width": 300,
+        "height": 500
+      },
+      "maximumSize": {
+        "width": 2000,
+        "height": 2000
+      },
+      "preferredDockedSize": {
+        "width": 350,
+        "height": 800
+      },
+      "preferredFloatingSize": {
+        "width": 350,
+        "height": 800
+      },
+      "icons": [
+        {
+          "width": 32,
+          "height": 32,
+          "path": "icons/icon_D.png",
+          "scale": [
+            1,
+            2
+          ],
+          "theme": [
+            "dark",
+            "darkest"
+          ],
+          "species": [
+            "generic"
+          ]
+        },
+        {
+          "width": 32,
+          "height": 32,
+          "path": "icons/icon_N.png",
+          "scale": [
+            1,
+            2
+          ],
+          "theme": [
+            "lightest",
+            "light"
+          ],
+          "species": [
+            "generic"
+          ]
+        }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "width": 32,
+      "height": 32,
+      "path": "icons/icon_D.png",
+      "scale": [
+        1,
+        2
+      ],
+      "theme": [
+        "dark",
+        "darkest"
+      ],
+      "species": [
+        "generic"
+      ]
+    },
+    {
+      "width": 32,
+      "height": 32,
+      "path": "icons/icon_N.png",
+      "scale": [
+        1,
+        2
+      ],
+      "theme": [
+        "lightest",
+        "light"
+      ],
+      "species": [
+        "generic"
+      ]
+    }
+  ]
+}
