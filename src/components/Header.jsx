@@ -4,12 +4,12 @@ export const Header = () => {
     return (
         <div className="header">
             <div className="header-brand">
-                {/* Logo nhỏ */}
-                <svg className="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                </svg>
-                {/* Text mảnh hơn */}
-                <span className="brand-title">Chuối AI <span className="brand-badge">PRO</span></span>
+                <div className="logo-wrapper">
+                    <svg className="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                    </svg>
+                </div>
+                <span className="brand-title">Nano AI <span className="brand-badge">PRO</span></span>
             </div>
 
             <div className="header-controls">
