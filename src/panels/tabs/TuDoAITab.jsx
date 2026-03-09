@@ -2,17 +2,64 @@ import React, { useState } from 'react';
 
 export const TuDoAITab = () => {
     const [isLoading, setIsLoading] = useState(false);
+    
+    // Phase 1.5: Frontend States
+    const [aspectRatio, setAspectRatio] = useState('2:3');
+    const [size, setSize] = useState('4K');
     const [images, setImages] = useState([]);
+    const [activeImageIndex, setActiveImageIndex] = useState(0);
+    const [prompt, setPrompt] = useState('');
+    const [autoZoom, setAutoZoom] = useState(true);
 
     const handleCreate = () => {
         setIsLoading(true);
+
+        // Phase 1.5: Gather state into JSON Payload
+        const payload = {
+            action: 'TuDoAI',
+            aspectRatio,
+            size,
+            referenceImages: images,
+            activeImageIndex,
+            prompt,
+            toggles: {
+                autoZoom
+            }
+        };
+
+        console.log("=== MOCK API PAYLOAD (Tự Do AI) ===");
+        console.log(JSON.stringify(payload, null, 2));
+        console.log("====================================");
+
         // Simulate API call
         setTimeout(() => setIsLoading(false), 3000);
     };
 
     const handleAddDemoImage = () => {
-        setImages(['https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100&h=100']);
-    }
+        if (images.length >= 10) return;
+        setImages(prev => [...prev, 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100&h=100']);
+        setActiveImageIndex(images.length);
+    };
+
+    const handleQuickLayer = () => {
+        console.log("Mocking Photoshop UXP Action: Saving current layer to temp file...");
+        if (images.length >= 10) return;
+        
+        // Mock pushing image to Reference Frame
+        const mockLayerImg = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&q=80&w=100&h=100';
+        setImages(prev => [...prev, mockLayerImg]);
+        setActiveImageIndex(images.length);
+    };
+
+    const handleRemoveImage = (index, e) => {
+        e.stopPropagation();
+        setImages(prev => prev.filter((_, i) => i !== index));
+        if (activeImageIndex === index) {
+            setActiveImageIndex(0);
+        } else if (activeImageIndex > index) {
+            setActiveImageIndex(prev => prev - 1);
+        }
+    };
 
     return (
         <div className="tab-pane">
@@ -27,7 +74,7 @@ export const TuDoAITab = () => {
                 <div className="flex-row">
                     <div className="flex-col">
                         <span className="section-label">Tỉ lệ</span>
-                        <select className="dropdown" defaultValue="2:3">
+                        <select className="dropdown" value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)}>
                             <option value="2:3">2:3 (Dọc)</option>
                             <option value="1:1">1:1 (Vuông)</option>
                             <option value="3:4">3:4</option>
@@ -36,7 +83,7 @@ export const TuDoAITab = () => {
                     </div>
                     <div className="flex-col">
                         <span className="section-label">Kích thước</span>
-                        <select className="dropdown" defaultValue="4K">
+                        <select className="dropdown" value={size} onChange={(e) => setSize(e.target.value)}>
                             <option value="4K">4K (4096px)</option>
                             <option value="2K">2K (2048px)</option>
                             <option value="1K">1K (1024px)</option>
@@ -58,21 +105,30 @@ export const TuDoAITab = () => {
                     </div>
                 ) : (
                     <div className="reference-grid">
-                        <div className="ref-image active" title="Ảnh 1">
-                            <div className="ref-delete" onClick={() => setImages([])}>
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        {images.map((img, idx) => (
+                            <div 
+                                key={idx} 
+                                className={`ref-image ${activeImageIndex === idx ? 'active' : ''}`} 
+                                title={`Ảnh ${idx + 1}`}
+                                onClick={() => setActiveImageIndex(idx)}
+                            >
+                                <div className="ref-delete" onClick={(e) => handleRemoveImage(idx, e)}>
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </div>
+                                <img src={img} alt="ref" />
                             </div>
-                            <img src={images[0]} alt="ref" />
-                        </div>
-                        <div className="ref-add" title="Thêm ảnh">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        </div>
+                        ))}
+                        {images.length < 10 && (
+                            <div className="ref-add" title="Thêm ảnh" onClick={handleAddDemoImage}>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            </div>
+                        )}
                     </div>
                 )}
                 
                 <div className="flex-row">
                     <button className="btn full-width" onClick={handleAddDemoImage}>Chọn Ảnh</button>
-                    <button className="btn full-width" onClick={handleAddDemoImage}>Lớp nhanh</button>
+                    <button className="btn full-width" onClick={handleQuickLayer}>Lớp nhanh</button>
                 </div>
             </div>
 
@@ -81,9 +137,15 @@ export const TuDoAITab = () => {
                     <span className="section-label">Prompt</span>
                 </div>
                 <div className="prompt-box">
-                    <textarea className="textarea" placeholder="Mô tả chi tiết nội dung ảnh bạn muốn tạo..."></textarea>
+                    <textarea 
+                        className="textarea" 
+                        placeholder="Mô tả chi tiết nội dung ảnh bạn muốn tạo..."
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        maxLength={500}
+                    ></textarea>
                     <div className="prompt-footer">
-                        <span className="char-counter">0/500</span>
+                        <span className="char-counter">{prompt.length}/500</span>
                     </div>
                 </div>
             </div>
@@ -92,7 +154,7 @@ export const TuDoAITab = () => {
                 <div className="switch-row">
                     <div className="switch-label">Tự động thu phóng</div>
                     <label className="switch">
-                        <input type="checkbox" defaultChecked />
+                        <input type="checkbox" checked={autoZoom} onChange={(e) => setAutoZoom(e.target.checked)} />
                         <span className="slider"></span>
                     </label>
                 </div>
