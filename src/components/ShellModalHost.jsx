@@ -561,6 +561,120 @@ const PurchaseModal = ({ options, onClose }) => (
     </ModalFrame>
 );
 
+const CreditSubscriptionModal = ({ summaries, helpers, refreshStatus, onClose, onOpenPurchase, onOpenSupport, onConfirmRefresh }) => {
+    const { entitlement, entitlementUi, entitlementSyncError } = summaries;
+    const primaryAction = entitlementUi.primaryAction;
+
+    const handlePrimaryAction = () => {
+        if (primaryAction.type === "support") {
+            onOpenSupport();
+            return;
+        }
+
+        onOpenPurchase();
+    };
+
+    return (
+        <ModalFrame
+            title="Credit & Subscription"
+            subtitle="Tóm tắt entitlement đang áp dụng cho toàn plugin, bao gồm trạng thái gói, credit còn lại và hành động tiếp theo."
+            onClose={onClose}
+            canClose={true}
+        >
+            <div className="modal-stack">
+                {entitlementSyncError ? (
+                    <div className="form-error">
+                        Không thể cập nhật trạng thái mới nhất. Plugin đang giữ summary gần nhất còn dùng được.
+                    </div>
+                ) : null}
+
+                {entitlementUi.lowCredit ? (
+                    <div className="info-banner">
+                        Credit của bạn đang ở mức thấp. Bạn vẫn có thể generate, nhưng nên chuẩn bị mua thêm để tránh gián đoạn.
+                    </div>
+                ) : null}
+
+                {!entitlementUi.canGenerate ? (
+                    <div className="form-error">
+                        <strong>{entitlementUi.denyMessage}.</strong>
+                        <span> Plugin vẫn cho phép bạn xem tab và chỉnh input, nhưng thao tác generate sẽ bị chặn cho tới khi entitlement hợp lệ.</span>
+                    </div>
+                ) : null}
+
+                <div className="summary-grid">
+                    <div className="summary-tile">
+                        <span className="summary-label">Plan</span>
+                        <strong>{entitlementUi.planName}</strong>
+                        <span>{entitlementUi.statusLabel}</span>
+                    </div>
+                    <div className="summary-tile">
+                        <span className="summary-label">Credit còn lại</span>
+                        <strong>{entitlement ? entitlement.creditRemaining : 0}</strong>
+                        <span>{entitlementUi.creditDetail}</span>
+                    </div>
+                    <div className="summary-tile">
+                        <span className="summary-label">Đã dùng / tổng limit</span>
+                        <strong>{entitlementUi.usageLabel}</strong>
+                        <span>Summary hợp nhất cho entitlement đang dùng để generate.</span>
+                    </div>
+                    <div className="summary-tile">
+                        <span className="summary-label">Ngày reset tiếp theo</span>
+                        <strong>{helpers.formatEntitlementDate(entitlement && entitlement.nextResetAt)}</strong>
+                        <span>Không tự suy luận ở frontend nếu backend chưa trả dữ liệu.</span>
+                    </div>
+                    <div className="summary-tile">
+                        <span className="summary-label">Ngày hết hạn</span>
+                        <strong>{helpers.formatEntitlementDate(entitlement && entitlement.subscriptionEndAt)}</strong>
+                        <span>Với entitlement onboarding hoặc Free có thể không áp dụng.</span>
+                    </div>
+                    <div className="summary-tile">
+                        <span className="summary-label">Trạng thái sử dụng</span>
+                        <strong>{entitlementUi.canGenerate ? "Có thể generate" : "Đang bị chặn"}</strong>
+                        <span>{entitlementUi.canGenerate ? "Backend vẫn là nguồn chân lý cuối cùng khi submit." : entitlementUi.denyMessage}</span>
+                    </div>
+                </div>
+
+                <div className="account-detail-card">
+                    <span className="summary-label">Hành động</span>
+                    <strong>{primaryAction.label}</strong>
+                    <span>{primaryAction.type === "support" ? (entitlementUi.supportContact || "Liên hệ bộ phận hỗ trợ để mở khóa lại tài khoản.") : "Mở flow mua riêng để tiếp tục sử dụng plugin."}</span>
+                </div>
+
+                <div className="modal-actions">
+                    <button className="btn primary" onClick={handlePrimaryAction}>
+                        {primaryAction.label}
+                    </button>
+                    <button className="btn" onClick={onConfirmRefresh} disabled={refreshStatus === "refreshing"}>
+                        {refreshStatus === "refreshing" ? "Đang đồng bộ..." : "Refresh"}
+                    </button>
+                </div>
+            </div>
+        </ModalFrame>
+    );
+};
+
+const SupportModal = ({ supportContact, onClose }) => (
+    <ModalFrame
+        title="Liên hệ hỗ trợ"
+        subtitle="CTA dành riêng cho trường hợp subscription bị suspended hoặc cần can thiệp vận hành."
+        onClose={onClose}
+        canClose={true}
+    >
+        <div className="modal-stack">
+            <div className="account-detail-card">
+                <span className="summary-label">Kênh hỗ trợ</span>
+                <strong>{supportContact || "support@banana-tool.vn"}</strong>
+                <span>Chia sẻ email đăng nhập, thời điểm gặp lỗi và ảnh chụp trạng thái hiện tại để đội hỗ trợ xử lý nhanh hơn.</span>
+            </div>
+            <div className="modal-actions">
+                <button className="btn" onClick={onClose}>
+                    Đóng
+                </button>
+            </div>
+        </div>
+    </ModalFrame>
+);
+
 const RefreshConfirmModal = ({ onClose, onConfirmRefresh, refreshStatus }) => (
     <ModalFrame
         title="Xác nhận làm mới shell"
@@ -584,7 +698,7 @@ const RefreshConfirmModal = ({ onClose, onConfirmRefresh, refreshStatus }) => (
     </ModalFrame>
 );
 
-const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, onOpenPurchase, onLogout }) => {
+const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, onOpenPurchase, onOpenCreditSubscription, onLogout }) => {
     const [view, setView] = useState("overview");
     const [displayName, setDisplayName] = useState(userProfile && userProfile.displayName ? userProfile.displayName : "");
     const [newEmail, setNewEmail] = useState("");
@@ -800,6 +914,19 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
 
             <div className="summary-grid">
                 <div className="summary-tile">
+                    <span className="summary-label">Plan hiện tại</span>
+                    <strong>{summaries.planSummary.name}</strong>
+                    <span>{summaries.planSummary.status}</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Credit</span>
+                    <strong>{summaries.creditSummary.label}</strong>
+                    <span>{summaries.creditSummary.detail}</span>
+                </div>
+            </div>
+
+            <div className="summary-grid">
+                <div className="summary-tile">
                     <span className="summary-label">Email</span>
                     <strong>{userProfile.email}</strong>
                     <span>{userProfile.pendingEmail ? `Đang chờ đổi sang ${userProfile.pendingEmail}` : "Địa chỉ đăng nhập hiện tại"}</span>
@@ -831,8 +958,8 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                 <button className="btn" onClick={() => setView("change-password")}>
                     Đổi mật khẩu
                 </button>
-                <button className="btn" onClick={onOpenPurchase}>
-                    Xem gói / Credit
+                <button className="btn" onClick={onOpenCreditSubscription}>
+                    Xem Credit & Subscription
                 </button>
                 <button className="btn danger" onClick={onLogout}>
                     Đăng xuất
@@ -1030,6 +1157,8 @@ export const ShellModalHost = ({
     helpers,
     onClose,
     onOpenPurchase,
+    onOpenCreditSubscription,
+    onOpenSupport,
     onConfirmRefresh,
     onLogout
 }) => {
@@ -1061,13 +1190,32 @@ export const ShellModalHost = ({
                 helpers={helpers}
                 onClose={onClose}
                 onOpenPurchase={onOpenPurchase}
+                onOpenCreditSubscription={onOpenCreditSubscription}
                 onLogout={onLogout}
+            />
+        );
+    }
+
+    if (activeModal === "credit-subscription") {
+        return (
+            <CreditSubscriptionModal
+                summaries={summaries}
+                helpers={helpers}
+                refreshStatus={refreshStatus}
+                onClose={onClose}
+                onOpenPurchase={onOpenPurchase}
+                onOpenSupport={onOpenSupport}
+                onConfirmRefresh={onConfirmRefresh}
             />
         );
     }
 
     if (activeModal === "purchase") {
         return <PurchaseModal options={summaries.purchaseOptions} onClose={onClose} />;
+    }
+
+    if (activeModal === "support") {
+        return <SupportModal supportContact={summaries.entitlementUi && summaries.entitlementUi.supportContact} onClose={onClose} />;
     }
 
     if (activeModal === "refresh-confirm") {

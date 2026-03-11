@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export const PhucCheTab = ({ actionsDisabled, onRequireAuth }) => {
+export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
     const [isLoading, setIsLoading] = useState(false);
     
     // Phase 1.5: Frontend States for PhucChe
@@ -9,7 +9,7 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth }) => {
     const [enhanceFace, setEnhanceFace] = useState(true);
     const [denoise, setDenoise] = useState(true);
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (actionsDisabled) {
             onRequireAuth();
             return;
@@ -17,23 +17,22 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth }) => {
 
         setIsLoading(true);
 
-        // Phase 1.5: Gather state into JSON Payload
-        const payload = {
-            action: 'PhucCheAnh',
-            aspectRatio,
-            size,
-            toggles: {
-                enhanceFace,
-                denoise
-            }
-        };
-
-        console.log("=== MOCK API PAYLOAD (Phục Chế Ảnh) ===");
-        console.log(JSON.stringify(payload, null, 2));
-        console.log("======================================");
-
-        // Simulate API call
-        setTimeout(() => setIsLoading(false), 3000);
+        try {
+            await onGenerate({
+                prompt: "Phục chế ảnh theo cấu hình hiện tại",
+                options: {
+                    tool: "phuc-che-anh",
+                    aspectRatio,
+                    size,
+                    toggles: {
+                        enhanceFace,
+                        denoise
+                    }
+                }
+            });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (

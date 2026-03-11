@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export const ThayNenTab = ({ actionsDisabled, onRequireAuth }) => {
+export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
     // For demoing the premium loading state
     const [isLoading, setIsLoading] = useState(false);
     
@@ -13,7 +13,7 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth }) => {
     const [keepSubject, setKeepSubject] = useState(true);
     const [foreground, setForeground] = useState(false);
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (actionsDisabled) {
             onRequireAuth();
             return;
@@ -21,26 +21,24 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth }) => {
 
         setIsLoading(true);
 
-        // Phase 1.5: Gather state into JSON Payload
-        const payload = {
-            action: 'ThayNen',
-            aspectRatio,
-            size,
-            referenceImages: images,
-            activeImageIndex,
-            prompt,
-            toggles: {
-                keepSubject,
-                foreground
-            }
-        };
-
-        console.log("=== MOCK API PAYLOAD (Thay Nền) ===");
-        console.log(JSON.stringify(payload, null, 2));
-        console.log("===================================");
-
-        // Simulate API call
-        setTimeout(() => setIsLoading(false), 3000);
+        try {
+            await onGenerate({
+                prompt: prompt.trim() || "Thay nền ảnh theo cấu hình hiện tại",
+                options: {
+                    tool: "thay-nen",
+                    aspectRatio,
+                    size,
+                    referenceImageCount: images.length,
+                    activeImageIndex,
+                    toggles: {
+                        keepSubject,
+                        foreground
+                    }
+                }
+            });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleAddDemoImage = () => {

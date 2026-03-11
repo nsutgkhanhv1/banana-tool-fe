@@ -4,6 +4,7 @@ import { TabNavigation } from "../components/TabNavigation.jsx";
 import { ShellModalHost } from "../components/ShellModalHost.jsx";
 import { ShellSettingsView } from "../components/ShellSettingsView.jsx";
 import { requestJson } from "../lib/api.js";
+import { formatEntitlementDate, getEntitlementUiState, getGenerateDenyMessage } from "../lib/entitlement.js";
 import { ThayNenTab } from "./tabs/ThayNenTab.jsx";
 import { PhucCheTab } from "./tabs/PhucCheTab.jsx";
 import { TuDoAITab } from "./tabs/TuDoAITab.jsx";
@@ -145,37 +146,6 @@ const persistSession = (session) => {
     storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
 };
 
-const formatPlanName = (planCode) => {
-    if (!planCode) {
-        return "Chưa có gói";
-    }
-
-    if (planCode === "free") {
-        return "Free";
-    }
-
-    return planCode
-        .split(/[-_]/g)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ");
-};
-
-const formatPlanStatus = (status) => {
-    if (status === "active") {
-        return "Đang hoạt động";
-    }
-
-    if (status === "expired") {
-        return "Đã hết hạn";
-    }
-
-    if (status === "suspended") {
-        return "Tạm dừng";
-    }
-
-    return "Đăng nhập để xem";
-};
-
 const formatRelativeDate = (timestamp) => {
     if (!timestamp) {
         return "Chưa có";
@@ -200,6 +170,7 @@ export const App = () => {
     const [session, setSession] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
     const [entitlement, setEntitlement] = useState(null);
+    const [entitlementSyncError, setEntitlementSyncError] = useState("");
     const [refreshStatus, setRefreshStatus] = useState("idle");
     const [toast, setToast] = useState(null);
     const [tabRefreshVersion, setTabRefreshVersion] = useState(0);
@@ -240,6 +211,7 @@ export const App = () => {
         setAuthStatus("unauthenticated");
         setUserProfile(null);
         setEntitlement(null);
+        setEntitlementSyncError("");
     }, [handleSessionChange]);
 
     const openAuthModal = useCallback((initialView, nextConfig) => {
@@ -253,21 +225,60 @@ export const App = () => {
         }));
     }, []);
 
-    const loadShellData = useCallback(async (sessionValue) => {
-        const [profile, currentEntitlement] = await Promise.all([
-            requestJson("/me", { method: "GET" }, sessionValue, handleSessionChange),
-            requestJson("/me/entitlement", { method: "GET" }, sessionValue, handleSessionChange)
-        ]);
+    const openCreditSubscription = useCallback(() => {
+        setActiveAuxScreen(null);
+        setActiveModal("credit-subscription");
+    }, []);
 
+    const openSupportModal = useCallback(() => {
+        setActiveAuxScreen(null);
+        setActiveModal("support");
+    }, []);
+
+    const loadEntitlementData = useCallback(async (sessionValue, options) => {
+        const config = options || {};
+
+        try {
+            const currentEntitlement = await requestJson("/me/entitlement", { method: "GET" }, sessionValue, handleSessionChange);
+            setEntitlement(currentEntitlement);
+            setEntitlementSyncError("");
+            return {
+                entitlement: currentEntitlement,
+                error: null
+            };
+        } catch (error) {
+            if (error && error.status === 401) {
+                throw error;
+            }
+
+            if (!config.preserveExisting) {
+                setEntitlement(null);
+            }
+
+            const message = error && error.message ? error.message : "Không thể cập nhật trạng thái mới nhất.";
+            setEntitlementSyncError(message);
+            return {
+                entitlement: config.preserveExisting ? entitlement : null,
+                error
+            };
+        }
+    }, [entitlement, handleSessionChange]);
+
+    const loadShellData = useCallback(async (sessionValue, options) => {
+        const profile = await requestJson("/me", { method: "GET" }, sessionValue, handleSessionChange);
         setUserProfile(profile);
-        setEntitlement(currentEntitlement);
         setAuthStatus("authenticated");
+
+        const entitlementResult = await loadEntitlementData(sessionValue, {
+            preserveExisting: Boolean(options && options.preserveEntitlement)
+        });
 
         return {
             profile,
-            entitlement: currentEntitlement
+            entitlement: entitlementResult.entitlement,
+            entitlementError: entitlementResult.error
         };
-    }, [handleSessionChange]);
+    }, [handleSessionChange, loadEntitlementData]);
 
     const bootstrapShell = useCallback(async () => {
         setBootStatus("loading");
@@ -287,8 +298,11 @@ export const App = () => {
             handleSessionChange(persistedSession);
 
             try {
-                await loadShellData(persistedSession);
+                const result = await loadShellData(persistedSession);
                 setActiveModal(null);
+                if (result.entitlementError) {
+                    showToast("Đã đăng nhập nhưng chưa thể đồng bộ entitlement mới nhất.", "warning");
+                }
             } catch (error) {
                 applyUnauthenticatedShell();
                 openAuthModal("login", {
@@ -324,17 +338,31 @@ export const App = () => {
         setRefreshStatus("refreshing");
 
         try {
-            await loadShellData(session);
-            setTabRefreshVersion((value) => value + 1);
-            setRefreshStatus("success");
-            showToast("Đã đồng bộ lại shell plugin.", "success");
-        } catch (error) {
-            applyUnauthenticatedShell();
-            openAuthModal("login", {
-                notice: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+            const result = await loadShellData(session, {
+                preserveEntitlement: true
             });
+
+            setTabRefreshVersion((value) => value + 1);
+
+            if (result.entitlementError) {
+                setRefreshStatus("error");
+                showToast("Không thể cập nhật trạng thái mới nhất. Plugin đang giữ summary cũ.", "warning");
+            } else {
+                setRefreshStatus("success");
+                showToast("Đã đồng bộ lại shell plugin.", "success");
+            }
+        } catch (error) {
+            if (error && error.status === 401) {
+                applyUnauthenticatedShell();
+                openAuthModal("login", {
+                    notice: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+                });
+                showToast("Không thể đồng bộ vì phiên đã hết hạn.", "error");
+            } else {
+                setEntitlementSyncError(error && error.message ? error.message : "Không thể cập nhật trạng thái mới nhất.");
+                showToast("Không thể cập nhật trạng thái mới nhất.", "error");
+            }
             setRefreshStatus("error");
-            showToast("Không thể đồng bộ vì phiên đã hết hạn.", "error");
         }
 
         setTimeout(() => {
@@ -342,14 +370,42 @@ export const App = () => {
         }, 1200);
     }, [applyUnauthenticatedShell, loadShellData, openAuthModal, session, showToast]);
 
+    const closeModal = useCallback(() => {
+        const shouldRefreshAfterPurchase = activeModal === "purchase" && authStatus === "authenticated";
+        setActiveModal(null);
+
+        if (shouldRefreshAfterPurchase) {
+            refreshShell();
+        }
+    }, [activeModal, authStatus, refreshShell]);
+
     const handleBlockedInteraction = useCallback(() => {
         showToast("Vui lòng đăng nhập để thực hiện thao tác này.", "warning");
         openAuthModal("login");
     }, [openAuthModal, showToast]);
 
+    const handleEntitlementDenied = useCallback((currentEntitlement) => {
+        const message = getGenerateDenyMessage(currentEntitlement);
+        const uiState = getEntitlementUiState(currentEntitlement);
+
+        showToast(message, uiState.severity === "danger" ? "error" : "warning");
+
+        if (uiState.primaryAction.type === "support") {
+            openSupportModal();
+            return;
+        }
+
+        openCreditSubscription();
+    }, [openCreditSubscription, openSupportModal, showToast]);
+
     const handleTabChange = useCallback((nextTab) => {
+        if (authStatus !== "authenticated") {
+            handleBlockedInteraction();
+            return;
+        }
+
         setActiveTab(nextTab);
-    }, []);
+    }, [authStatus, handleBlockedInteraction]);
 
     const performLogout = useCallback(async () => {
         if (session) {
@@ -397,8 +453,29 @@ export const App = () => {
         }
 
         if (action === "purchase") {
+            if (authStatus !== "authenticated") {
+                openAuthModal("login");
+                showToast("Vui lòng đăng nhập để thực hiện thao tác này.", "warning");
+                return;
+            }
+
             setActiveAuxScreen(null);
             setActiveModal("purchase");
+            return;
+        }
+
+        if (action === "credit-subscription") {
+            if (authStatus !== "authenticated") {
+                openAuthModal("login");
+                return;
+            }
+
+            openCreditSubscription();
+            return;
+        }
+
+        if (action === "support") {
+            openSupportModal();
             return;
         }
 
@@ -431,7 +508,7 @@ export const App = () => {
 
             performLogout();
         }
-    }, [authStatus, openAuthModal, performLogout]);
+    }, [authStatus, openAuthModal, openCreditSubscription, openSupportModal, performLogout]);
 
     const submitLogin = useCallback(async ({ email, password }) => {
         const data = await requestJson("/auth/login", {
@@ -448,9 +525,12 @@ export const App = () => {
         };
 
         handleSessionChange(nextSession);
-        await loadShellData(nextSession);
+        const result = await loadShellData(nextSession);
         setActiveModal(null);
         showToast("Đăng nhập thành công.", "success");
+        if (result.entitlementError) {
+            showToast("Đã đăng nhập nhưng chưa thể cập nhật entitlement mới nhất.", "warning");
+        }
         return data.user;
     }, [handleSessionChange, loadShellData, session, showToast]);
 
@@ -585,7 +665,92 @@ export const App = () => {
         return data;
     }, [handleSessionChange, session, showToast]);
 
+    const submitGenerate = useCallback(async ({ prompt, options, imageBase64 }) => {
+        if (!session) {
+            openAuthModal("login");
+            return { ok: false };
+        }
+
+        let currentEntitlement = entitlement;
+
+        if (!currentEntitlement) {
+            const entitlementResult = await loadEntitlementData(session, {
+                preserveExisting: false
+            });
+            currentEntitlement = entitlementResult.entitlement;
+
+            if (!currentEntitlement) {
+                showToast("Chưa thể xác định entitlement hiện tại. Vui lòng refresh rồi thử lại.", "warning");
+                openCreditSubscription();
+                return { ok: false };
+            }
+        }
+
+        if (!currentEntitlement.canGenerate) {
+            handleEntitlementDenied(currentEntitlement);
+            return { ok: false };
+        }
+
+        try {
+            const data = await requestJson("/images/generate", {
+                method: "POST",
+                body: JSON.stringify({
+                    prompt,
+                    imageBase64,
+                    options
+                })
+            }, session, handleSessionChange);
+
+            setTabRefreshVersion((value) => value + 1);
+
+            return {
+                ok: true,
+                data
+            };
+        } catch (error) {
+            if (error && error.status === 401) {
+                applyUnauthenticatedShell();
+                openAuthModal("login", {
+                    notice: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+                });
+                showToast("Phiên đăng nhập đã hết hạn.", "error");
+                return { ok: false };
+            }
+
+            if (error && (error.code === "ENTITLEMENT_DENIED" || error.code === "NO_CREDITS")) {
+                const entitlementResult = await loadEntitlementData(session, {
+                    preserveExisting: true
+                });
+                handleEntitlementDenied(entitlementResult.entitlement || entitlement);
+                return { ok: false, error };
+            }
+
+            showToast(error && error.message ? error.message : "Không thể generate ảnh.", "error");
+            return { ok: false, error };
+        } finally {
+            if (session) {
+                const entitlementResult = await loadEntitlementData(session, {
+                    preserveExisting: true
+                });
+
+                if (entitlementResult.error) {
+                    showToast("Không thể cập nhật credit mới nhất sau generate. Plugin đang giữ summary cũ.", "warning");
+                }
+            }
+        }
+    }, [
+        applyUnauthenticatedShell,
+        handleEntitlementDenied,
+        handleSessionChange,
+        loadEntitlementData,
+        openCreditSubscription,
+        openAuthModal,
+        session,
+        showToast
+    ]);
+
     const shellLocked = authStatus !== "authenticated";
+    const entitlementUi = getEntitlementUiState(entitlement);
     const currentUser = userProfile ? {
         displayName: userProfile.displayName || userProfile.email || "Người dùng",
         identifier: userProfile.email || "Chưa có email"
@@ -594,26 +759,29 @@ export const App = () => {
         identifier: "Chưa đăng nhập"
     };
     const currentPlan = entitlement ? {
-        name: formatPlanName(entitlement.planCode),
-        status: formatPlanStatus(entitlement.subscriptionStatus)
+        name: entitlementUi.planName,
+        status: entitlementUi.statusLabel
     } : {
-        name: "Chưa có gói",
-        status: "Đăng nhập để xem"
+        name: shellLocked ? "Chưa có gói" : "Chưa có dữ liệu",
+        status: shellLocked ? "Đăng nhập để xem" : "Không thể đồng bộ"
     };
     const currentCredit = entitlement ? {
-        remaining: entitlement.imagesRemaining,
-        label: `${entitlement.imagesRemaining} ảnh`,
-        detail: `${entitlement.imagesUsed}/${entitlement.monthlyCreditLimit} đã dùng`
+        remaining: entitlement.creditRemaining,
+        label: entitlementUi.creditLabel,
+        detail: entitlementUi.creditDetail,
+        severity: entitlementUi.severity
     } : {
         remaining: 0,
-        label: "0 ảnh",
-        detail: "Đăng nhập để đồng bộ"
+        label: shellLocked ? "0 credit" : "Chưa có dữ liệu",
+        detail: shellLocked ? "Đăng nhập để đồng bộ" : "Không thể cập nhật trạng thái mới nhất",
+        severity: "neutral"
     };
 
     const tabProps = useMemo(() => ({
         actionsDisabled: shellLocked,
-        onRequireAuth: handleBlockedInteraction
-    }), [handleBlockedInteraction, shellLocked]);
+        onRequireAuth: handleBlockedInteraction,
+        onGenerate: submitGenerate
+    }), [handleBlockedInteraction, shellLocked, submitGenerate]);
 
     const tabsMarkup = useMemo(() => (
         TABS.map((tab) => {
@@ -628,11 +796,12 @@ export const App = () => {
                         refreshVersion={tabRefreshVersion}
                         actionsDisabled={tabProps.actionsDisabled}
                         onRequireAuth={tabProps.onRequireAuth}
+                        onGenerate={tabProps.onGenerate}
                     />
                 </div>
             );
         })
-    ), [activeTab, tabProps.actionsDisabled, tabProps.onRequireAuth, tabRefreshVersion]);
+    ), [activeTab, tabProps.actionsDisabled, tabProps.onGenerate, tabProps.onRequireAuth, tabRefreshVersion]);
 
     if (bootStatus !== "ready") {
         return (
@@ -679,7 +848,7 @@ export const App = () => {
                         <div className="shell-lock-banner">
                             <div>
                                 <strong>Plugin đang ở chế độ chưa đăng nhập.</strong>
-                                <span>Bạn vẫn có thể xem shell và chuyển tab, nhưng mọi thao tác tạo side effect đang bị khóa.</span>
+                                <span>Bạn vẫn có thể xem shell, nhưng chuyển tab và mọi thao tác có side effect đều đang bị khóa.</span>
                             </div>
                             <button className="btn primary" onClick={() => openAuthModal("login")}>
                                 Đăng nhập
@@ -709,12 +878,16 @@ export const App = () => {
                     planSummary: currentPlan,
                     creditSummary: currentCredit,
                     entitlement,
+                    entitlementUi,
+                    entitlementSyncError,
                     historyItems: HISTORY_ITEMS,
                     purchaseOptions: PURCHASE_OPTIONS
                 }}
                 userProfile={userProfile}
-                onClose={() => setActiveModal(null)}
+                onClose={closeModal}
                 onOpenPurchase={() => setActiveModal("purchase")}
+                onOpenCreditSubscription={openCreditSubscription}
+                onOpenSupport={openSupportModal}
                 onConfirmRefresh={refreshShell}
                 onLogout={performLogout}
                 authActions={{
@@ -731,7 +904,8 @@ export const App = () => {
                     changePassword: submitPasswordChange
                 }}
                 helpers={{
-                    formatRelativeDate
+                    formatRelativeDate,
+                    formatEntitlementDate
                 }}
             />
 

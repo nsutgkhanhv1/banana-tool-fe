@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export const TuDoAITab = ({ actionsDisabled, onRequireAuth }) => {
+export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
     const [isLoading, setIsLoading] = useState(false);
     
     // Phase 1.5: Frontend States
@@ -11,7 +11,7 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth }) => {
     const [prompt, setPrompt] = useState('');
     const [autoZoom, setAutoZoom] = useState(true);
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (actionsDisabled) {
             onRequireAuth();
             return;
@@ -19,25 +19,23 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth }) => {
 
         setIsLoading(true);
 
-        // Phase 1.5: Gather state into JSON Payload
-        const payload = {
-            action: 'TuDoAI',
-            aspectRatio,
-            size,
-            referenceImages: images,
-            activeImageIndex,
-            prompt,
-            toggles: {
-                autoZoom
-            }
-        };
-
-        console.log("=== MOCK API PAYLOAD (Tự Do AI) ===");
-        console.log(JSON.stringify(payload, null, 2));
-        console.log("====================================");
-
-        // Simulate API call
-        setTimeout(() => setIsLoading(false), 3000);
+        try {
+            await onGenerate({
+                prompt: prompt.trim() || "Tạo ảnh tự do theo cấu hình hiện tại",
+                options: {
+                    tool: "tu-do-ai",
+                    aspectRatio,
+                    size,
+                    referenceImageCount: images.length,
+                    activeImageIndex,
+                    toggles: {
+                        autoZoom
+                    }
+                }
+            });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleAddDemoImage = () => {

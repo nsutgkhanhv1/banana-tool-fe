@@ -294,6 +294,43 @@ body::after {
     justify-content: flex-end;
 }
 
+.entitlement-summary {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    padding: 0;
+    color: var(--text-main);
+    font-family: inherit;
+    text-align: left;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    transition: all var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.entitlement-summary:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.entitlement-summary .plan-chip,
+.entitlement-summary .credits {
+    border: none;
+    background: transparent;
+}
+
+.entitlement-warning {
+    border-color: rgba(255, 179, 0, 0.28);
+    box-shadow: 0 0 0 1px rgba(255, 179, 0, 0.08);
+}
+
+.entitlement-danger {
+    border-color: rgba(255, 107, 107, 0.28);
+    box-shadow: 0 0 0 1px rgba(255, 107, 107, 0.08);
+}
+
 .credits {
     display: flex;
     align-items: center;
@@ -313,6 +350,16 @@ body::after {
     border-radius: 50%;
     background-color: #00E676;
     box-shadow: 0 0 8px rgba(0, 230, 118, 0.5);
+}
+
+.entitlement-warning .credits-dot {
+    background-color: #F4B400;
+    box-shadow: 0 0 8px rgba(244, 180, 0, 0.45);
+}
+
+.entitlement-danger .credits-dot {
+    background-color: #FF6B6B;
+    box-shadow: 0 0 8px rgba(255, 107, 107, 0.45);
 }
 
 .credits-copy {

@@ -54,19 +54,25 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
             </div>
 
             <div className="header-controls">
-                <div className="plan-chip">
-                    <span className="chip-label">Gói</span>
-                    <strong>{planSummary.name}</strong>
-                    <small>{planSummary.status}</small>
-                </div>
-
-                <div className="credits">
-                    <div className="credits-dot"></div>
-                    <div className="credits-copy">
-                        <span>{creditSummary.label}</span>
-                        <small>{creditSummary.detail}</small>
+                <button
+                    className={`entitlement-summary entitlement-${creditSummary.severity || "neutral"}`}
+                    onClick={() => onAction("credit-subscription")}
+                    title="Xem Credit & Subscription"
+                >
+                    <div className="plan-chip">
+                        <span className="chip-label">Gói</span>
+                        <strong>{planSummary.name}</strong>
+                        <small>{planSummary.status}</small>
                     </div>
-                </div>
+
+                    <div className="credits">
+                        <div className="credits-dot"></div>
+                        <div className="credits-copy">
+                            <span>{creditSummary.label}</span>
+                            <small>{creditSummary.detail}</small>
+                        </div>
+                    </div>
+                </button>
 
                 <button className="btn" onClick={() => onAction("purchase")}>
                     Mua gói
