@@ -820,6 +820,100 @@ body::after {
     font-size: 12px;
 }
 
+.segmented-control {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.segment-btn {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-muted);
+    border-radius: 10px;
+    padding: 10px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-speed);
+}
+
+.segment-btn.active {
+    color: var(--text-main);
+    border-color: rgba(255, 179, 0, 0.45);
+    background: rgba(255, 179, 0, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.18);
+}
+
+.status-banner {
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.status-banner-error {
+    background: rgba(255, 107, 107, 0.14);
+    border: 1px solid rgba(255, 107, 107, 0.24);
+    color: #ffc3c3;
+}
+
+.result-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.result-preview {
+    width: 100%;
+    display: block;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.result-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.status-pill.is-success {
+    background: rgba(0, 230, 118, 0.14);
+    color: #9bf3c2;
+    border: 1px solid rgba(0, 230, 118, 0.24);
+}
+
+.status-pill.is-error {
+    background: rgba(255, 107, 107, 0.14);
+    color: #ffc3c3;
+    border: 1px solid rgba(255, 107, 107, 0.24);
+}
+
+.result-detail {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.result-detail-error {
+    color: #ffb2b2;
+}
+
 .switch {
   position: relative;
   display: inline-block;

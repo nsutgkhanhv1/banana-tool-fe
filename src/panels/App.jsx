@@ -665,7 +665,7 @@ export const App = () => {
         return data;
     }, [handleSessionChange, session, showToast]);
 
-    const submitGenerate = useCallback(async ({ prompt, options, imageBase64 }) => {
+    const submitGenerateRequest = useCallback(async ({ path, body }) => {
         if (!session) {
             openAuthModal("login");
             return { ok: false };
@@ -692,13 +692,9 @@ export const App = () => {
         }
 
         try {
-            const data = await requestJson("/images/generate", {
+            const data = await requestJson(path, {
                 method: "POST",
-                body: JSON.stringify({
-                    prompt,
-                    imageBase64,
-                    options
-                })
+                body: JSON.stringify(body)
             }, session, handleSessionChange);
 
             setTabRefreshVersion((value) => value + 1);
@@ -749,6 +745,24 @@ export const App = () => {
         showToast
     ]);
 
+    const submitGenerate = useCallback(async ({ prompt, options, imageBase64 }) => (
+        submitGenerateRequest({
+            path: "/images/generate",
+            body: {
+                prompt,
+                imageBase64,
+                options
+            }
+        })
+    ), [submitGenerateRequest]);
+
+    const submitTuDoAIGenerate = useCallback(async (payload) => (
+        submitGenerateRequest({
+            path: "/images/tu-do-ai/generate",
+            body: payload
+        })
+    ), [submitGenerateRequest]);
+
     const shellLocked = authStatus !== "authenticated";
     const entitlementUi = getEntitlementUiState(entitlement);
     const currentUser = userProfile ? {
@@ -796,12 +810,12 @@ export const App = () => {
                         refreshVersion={tabRefreshVersion}
                         actionsDisabled={tabProps.actionsDisabled}
                         onRequireAuth={tabProps.onRequireAuth}
-                        onGenerate={tabProps.onGenerate}
+                        onGenerate={tab.id === "tudoai" ? submitTuDoAIGenerate : tabProps.onGenerate}
                     />
                 </div>
             );
         })
-    ), [activeTab, tabProps.actionsDisabled, tabProps.onGenerate, tabProps.onRequireAuth, tabRefreshVersion]);
+    ), [activeTab, submitTuDoAIGenerate, tabProps.actionsDisabled, tabProps.onGenerate, tabProps.onRequireAuth, tabRefreshVersion]);
 
     if (bootStatus !== "ready") {
         return (
