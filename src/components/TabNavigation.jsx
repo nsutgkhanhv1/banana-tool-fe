@@ -1,26 +1,15 @@
 import React from "react";
 
-export const TabNavigation = ({ activeTab, setActiveTab }) => {
-    return (
-        <div className="tab-navigation">
-            <button 
-                className={`tab-btn ${activeTab === 'thaynen' ? 'active' : ''}`}
-                onClick={() => setActiveTab('thaynen')}
+export const TabNavigation = ({ tabs, activeTab, onTabSelect }) => (
+    <div className="tab-navigation">
+        {tabs.map((tab) => (
+            <button
+                key={tab.id}
+                className={`tab-btn ${activeTab === tab.id ? "active" : ""}`}
+                onClick={() => onTabSelect(tab.id)}
             >
-                Thay Nền
+                {tab.label}
             </button>
-            <button 
-                className={`tab-btn ${activeTab === 'phucche' ? 'active' : ''}`}
-                onClick={() => setActiveTab('phucche')}
-            >
-                Phục chế ảnh
-            </button>
-            <button 
-                className={`tab-btn ${activeTab === 'tudoai' ? 'active' : ''}`}
-                onClick={() => setActiveTab('tudoai')}
-            >
-                Tự do AI
-            </button>
-        </div>
-    );
-};
+        ))}
+    </div>
+);

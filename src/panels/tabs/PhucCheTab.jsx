@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export const PhucCheTab = () => {
+export const PhucCheTab = ({ actionsDisabled, onRequireAuth }) => {
     const [isLoading, setIsLoading] = useState(false);
     
     // Phase 1.5: Frontend States for PhucChe
@@ -10,6 +10,11 @@ export const PhucCheTab = () => {
     const [denoise, setDenoise] = useState(true);
 
     const handleCreate = () => {
+        if (actionsDisabled) {
+            onRequireAuth();
+            return;
+        }
+
         setIsLoading(true);
 
         // Phase 1.5: Gather state into JSON Payload
@@ -87,7 +92,7 @@ export const PhucCheTab = () => {
                 <button 
                     className="btn primary full-width"
                     onClick={handleCreate}
-                    disabled={isLoading}
+                    disabled={isLoading || actionsDisabled}
                 >
                     {isLoading ? (
                         <>

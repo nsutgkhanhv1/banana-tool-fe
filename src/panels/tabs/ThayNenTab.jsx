@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export const ThayNenTab = () => {
+export const ThayNenTab = ({ actionsDisabled, onRequireAuth }) => {
     // For demoing the premium loading state
     const [isLoading, setIsLoading] = useState(false);
     
@@ -14,6 +14,11 @@ export const ThayNenTab = () => {
     const [foreground, setForeground] = useState(false);
 
     const handleCreate = () => {
+        if (actionsDisabled) {
+            onRequireAuth();
+            return;
+        }
+
         setIsLoading(true);
 
         // Phase 1.5: Gather state into JSON Payload
@@ -39,12 +44,22 @@ export const ThayNenTab = () => {
     };
 
     const handleAddDemoImage = () => {
+        if (actionsDisabled) {
+            onRequireAuth();
+            return;
+        }
+
         if (images.length >= 10) return;
         setImages(prev => [...prev, 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=100&h=100']);
         setActiveImageIndex(images.length);
     };
 
     const handleQuickLayer = () => {
+        if (actionsDisabled) {
+            onRequireAuth();
+            return;
+        }
+
         console.log("Mocking Photoshop UXP Action: Saving current layer to temp file...");
         if (images.length >= 10) return;
         
@@ -55,6 +70,11 @@ export const ThayNenTab = () => {
     };
 
     const handleRemoveImage = (index, e) => {
+        if (actionsDisabled) {
+            onRequireAuth();
+            return;
+        }
+
         e.stopPropagation();
         setImages(prev => prev.filter((_, i) => i !== index));
         if (activeImageIndex === index) {
@@ -130,8 +150,8 @@ export const ThayNenTab = () => {
                 )}
                 
                 <div className="flex-row">
-                    <button className="btn full-width" onClick={handleAddDemoImage}>Chọn Ảnh</button>
-                    <button className="btn full-width" onClick={handleQuickLayer}>Lớp nhanh</button>
+                    <button className="btn full-width" onClick={handleAddDemoImage} disabled={actionsDisabled}>Chọn Ảnh</button>
+                    <button className="btn full-width" onClick={handleQuickLayer} disabled={actionsDisabled}>Lớp nhanh</button>
                 </div>
             </div>
 
@@ -177,7 +197,7 @@ export const ThayNenTab = () => {
                 <button 
                     className="btn primary full-width" 
                     onClick={handleCreate}
-                    disabled={isLoading}
+                    disabled={isLoading || actionsDisabled}
                 >
                     {isLoading ? (
                         <>
@@ -194,4 +214,3 @@ export const ThayNenTab = () => {
         </div>
     );
 };
-
