@@ -24,7 +24,8 @@ export const ApiError = class extends Error {
     }
 };
 
-export const requestJson = async (path, init = {}, session, onSessionRefresh) => {
+export const requestJson = async (path, init = {}, session, onSessionRefresh, options = {}) => {
+    const config = options || {};
     const makeRequest = async (token) => fetch(`${API_BASE_URL}${path}`, {
         ...init,
         headers: {
@@ -36,7 +37,7 @@ export const requestJson = async (path, init = {}, session, onSessionRefresh) =>
 
     let response = await makeRequest(session ? session.accessToken : null);
 
-    if (response.status === 401 && session && session.refreshToken) {
+    if (!config.disableSessionRefresh && response.status === 401 && session && session.refreshToken) {
         const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
             method: "POST",
             headers: {
@@ -57,7 +58,9 @@ export const requestJson = async (path, init = {}, session, onSessionRefresh) =>
             onSessionRefresh(nextSession);
             response = await makeRequest(nextSession.accessToken);
         } else {
-            onSessionRefresh(null);
+            if (typeof onSessionRefresh === "function") {
+                onSessionRefresh(null);
+            }
             throw new ApiError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", refreshBody.code, 401);
         }
     }

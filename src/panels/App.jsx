@@ -5,6 +5,15 @@ import { ShellModalHost } from "../components/ShellModalHost.jsx";
 import { ShellSettingsView } from "../components/ShellSettingsView.jsx";
 import { requestJson } from "../lib/api.js";
 import { formatEntitlementDate, getEntitlementUiState, getGenerateDenyMessage } from "../lib/entitlement.js";
+import {
+    getPluginEnvironmentSummary,
+    getPluginVersion,
+    PLUGIN_DISPLAY_NAME,
+    PLUGIN_SUPPORT_CONTACT,
+    PLUGIN_SUPPORT_LINK
+} from "../lib/plugin-config.js";
+import { persistPluginSettings, readPluginSettings } from "../lib/plugin-settings.js";
+import { purchaseGateway } from "../lib/purchase.js";
 import { capturePhotoshopContext, insertGeneratedImage } from "../lib/photoshop.js";
 import { appendHistoryItem, loadHistoryItems, updateHistoryItemInsertState } from "../lib/result-history.js";
 import { ThayNenTab } from "./tabs/ThayNenTab.jsx";
@@ -19,38 +28,6 @@ const TABS = [
     { id: "thaynen", label: "Thay Nền", component: ThayNenTab },
     { id: "phucche", label: "Phục chế ảnh", component: PhucCheTab },
     { id: "tudoai", label: "Tự do AI", component: TuDoAITab }
-];
-
-const PURCHASE_OPTIONS = [
-    {
-        id: "credit-pack",
-        title: "Gói credit linh hoạt",
-        price: "299.000đ",
-        description: "Nạp thêm 80 credit cho các job ngắn hạn và chiến dịch đột xuất."
-    },
-    {
-        id: "studio-plan",
-        title: "Pro Studio Monthly",
-        price: "799.000đ / tháng",
-        description: "Phù hợp cho team xử lý ảnh mỗi ngày, có credit làm mới định kỳ."
-    }
-];
-
-const SHELL_SETTINGS = [
-    {
-        title: "Tùy chọn plugin",
-        items: [
-            { label: "Auto-save preview", value: "Bật", description: "Giữ bản xem trước gần nhất để mở lại nhanh hơn." },
-            { label: "UXP temp cache", value: "Tự động dọn", description: "Xóa dữ liệu tạm sau mỗi phiên để tránh đầy bộ nhớ." }
-        ]
-    },
-    {
-        title: "Hiển thị",
-        items: [
-            { label: "Ngôn ngữ giao diện", value: "Tiếng Việt", description: "Đồng bộ theo bộ thiết lập hiện tại của plugin." },
-            { label: "Thông báo tác vụ", value: "Rút gọn", description: "Toast ngắn gọn cho refresh, đăng nhập và trạng thái shell." }
-        ]
-    }
 ];
 
 const wait = (duration) => new Promise((resolve) => {
@@ -133,6 +110,14 @@ const formatRelativeDate = (timestamp) => {
     });
 };
 
+const resolveHistoryNamespace = (profile) => {
+    if (!profile) {
+        return null;
+    }
+
+    return profile.id || profile.email || "authenticated-user";
+};
+
 export const App = () => {
     const [bootStatus, setBootStatus] = useState("idle");
     const [authStatus, setAuthStatus] = useState("unknown");
@@ -150,6 +135,7 @@ export const App = () => {
     const [historyStatus, setHistoryStatus] = useState("idle");
     const [historyError, setHistoryError] = useState("");
     const [historyRestoreRequest, setHistoryRestoreRequest] = useState(null);
+    const [pluginSettings, setPluginSettings] = useState(() => readPluginSettings());
     const [authModalConfig, setAuthModalConfig] = useState({
         resetKey: 0,
         initialView: "login",
@@ -158,20 +144,21 @@ export const App = () => {
     });
 
     const historyNamespace = useMemo(() => {
-        if (!userProfile) {
-            return null;
-        }
-
-        return userProfile.id || userProfile.email || "authenticated-user";
+        return resolveHistoryNamespace(userProfile);
     }, [userProfile]);
 
-    const showToast = useCallback((message, tone) => {
+    const showToast = useCallback((message, tone, options) => {
+        const config = options || {};
+        const nextMessage = pluginSettings.toastMode === "detailed" && config.detail
+            ? config.detail
+            : message;
+
         setToast({
             id: Date.now(),
-            message,
+            message: nextMessage,
             tone: tone || "info"
         });
-    }, []);
+    }, [pluginSettings.toastMode]);
 
     useEffect(() => {
         if (!toast) {
@@ -184,6 +171,18 @@ export const App = () => {
 
         return () => clearTimeout(timer);
     }, [toast]);
+
+    const updatePluginSettings = useCallback((partialSettings) => {
+        setPluginSettings((current) => {
+            const nextSettings = {
+                ...current,
+                ...(partialSettings || {})
+            };
+
+            persistPluginSettings(nextSettings);
+            return nextSettings;
+        });
+    }, []);
 
     const handleSessionChange = useCallback((nextSession) => {
         setSession(nextSession);
@@ -223,7 +222,15 @@ export const App = () => {
         const config = options || {};
 
         try {
-            const currentEntitlement = await requestJson("/me/entitlement", { method: "GET" }, sessionValue, handleSessionChange);
+            const currentEntitlement = await requestJson(
+                "/me/entitlement",
+                { method: "GET" },
+                sessionValue,
+                handleSessionChange,
+                {
+                    disableSessionRefresh: Boolean(config.disableSessionRefresh)
+                }
+            );
             setEntitlement(currentEntitlement);
             setEntitlementSyncError("");
             return {
@@ -249,12 +256,22 @@ export const App = () => {
     }, [entitlement, handleSessionChange]);
 
     const loadShellData = useCallback(async (sessionValue, options) => {
-        const profile = await requestJson("/me", { method: "GET" }, sessionValue, handleSessionChange);
+        const config = options || {};
+        const profile = await requestJson(
+            "/me",
+            { method: "GET" },
+            sessionValue,
+            handleSessionChange,
+            {
+                disableSessionRefresh: Boolean(config.disableSessionRefresh)
+            }
+        );
         setUserProfile(profile);
         setAuthStatus("authenticated");
 
         const entitlementResult = await loadEntitlementData(sessionValue, {
-            preserveExisting: Boolean(options && options.preserveEntitlement)
+            preserveExisting: Boolean(config.preserveEntitlement),
+            disableSessionRefresh: Boolean(config.disableSessionRefresh)
         });
 
         return {
@@ -313,27 +330,41 @@ export const App = () => {
         persistTab(activeTab);
     }, [activeTab]);
 
-    const refreshHistory = useCallback(async () => {
-        if (!historyNamespace) {
+    const refreshHistory = useCallback(async (profileOverride) => {
+        const nextNamespace = resolveHistoryNamespace(profileOverride || userProfile);
+
+        if (!nextNamespace) {
             setHistoryItems([]);
             setHistoryStatus("ready");
             setHistoryError("");
-            return;
+            return {
+                ok: true,
+                skipped: true
+            };
         }
 
         setHistoryStatus("loading");
         setHistoryError("");
 
         try {
-            const items = await loadHistoryItems(historyNamespace);
+            const items = await loadHistoryItems(nextNamespace);
             setHistoryItems(items);
             setHistoryStatus("ready");
+            return {
+                ok: true,
+                skipped: false
+            };
         } catch (error) {
             setHistoryItems([]);
             setHistoryStatus("error");
             setHistoryError(error && error.message ? error.message : "Không thể đọc lịch sử local trong plugin.");
+            return {
+                ok: false,
+                skipped: false,
+                error
+            };
         }
-    }, [historyNamespace]);
+    }, [userProfile]);
 
     useEffect(() => {
         if (authStatus !== "authenticated") {
@@ -352,21 +383,32 @@ export const App = () => {
             return;
         }
 
+        if (refreshStatus === "refreshing") {
+            return;
+        }
+
+        setActiveModal(null);
         setRefreshStatus("refreshing");
 
         try {
             const result = await loadShellData(session, {
-                preserveEntitlement: true
+                preserveEntitlement: true,
+                disableSessionRefresh: true
             });
+            const historyResult = await refreshHistory(result.profile);
 
             setTabRefreshVersion((value) => value + 1);
 
-            if (result.entitlementError) {
+            if (result.entitlementError || (historyResult && !historyResult.ok)) {
                 setRefreshStatus("error");
-                showToast("Không thể cập nhật trạng thái mới nhất. Plugin đang giữ summary cũ.", "warning");
+                showToast("Không thể cập nhật đầy đủ dữ liệu mới nhất.", "warning", {
+                    detail: "Đã refresh session, user và shell summary, nhưng vẫn còn ít nhất một nguồn dữ liệu giữ trạng thái cũ."
+                });
             } else {
                 setRefreshStatus("success");
-                showToast("Đã đồng bộ lại shell plugin.", "success");
+                showToast("Đã đồng bộ lại dữ liệu plugin.", "success", {
+                    detail: "Đã đồng bộ lại session, user summary, entitlement và history local. Tab hiện tại được giữ nguyên."
+                });
             }
         } catch (error) {
             if (error && error.status === 401) {
@@ -374,10 +416,14 @@ export const App = () => {
                 openAuthModal("login", {
                     notice: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
                 });
-                showToast("Không thể đồng bộ vì phiên đã hết hạn.", "error");
+                showToast("Không thể đồng bộ vì phiên đã hết hạn.", "error", {
+                    detail: "Manual refresh phát hiện session không còn hợp lệ. Plugin đã chuyển sang trạng thái yêu cầu đăng nhập lại."
+                });
             } else {
                 setEntitlementSyncError(error && error.message ? error.message : "Không thể cập nhật trạng thái mới nhất.");
-                showToast("Không thể cập nhật trạng thái mới nhất.", "error");
+                showToast("Không thể cập nhật trạng thái mới nhất.", "error", {
+                    detail: "Refresh không hoàn tất do lỗi mạng hoặc backend tạm thời. Tab và form state hiện tại vẫn được giữ nguyên."
+                });
             }
             setRefreshStatus("error");
         }
@@ -385,7 +431,7 @@ export const App = () => {
         setTimeout(() => {
             setRefreshStatus("idle");
         }, 1200);
-    }, [applyUnauthenticatedShell, loadShellData, openAuthModal, session, showToast]);
+    }, [applyUnauthenticatedShell, loadShellData, openAuthModal, refreshHistory, refreshStatus, session, showToast]);
 
     const closeModal = useCallback(() => {
         const shouldRefreshAfterPurchase = activeModal === "purchase" && authStatus === "authenticated";
@@ -568,6 +614,10 @@ export const App = () => {
     }, [applyUnauthenticatedShell, handleSessionChange, openAuthModal, session, showToast]);
 
     const handleHeaderAction = useCallback((action) => {
+        if (refreshStatus === "refreshing") {
+            return;
+        }
+
         if (action === "account") {
             if (authStatus !== "authenticated") {
                 openAuthModal("login");
@@ -646,7 +696,23 @@ export const App = () => {
 
             performLogout();
         }
-    }, [authStatus, openAuthModal, openCreditSubscription, openSupportModal, performLogout]);
+    }, [authStatus, openAuthModal, openCreditSubscription, openSupportModal, performLogout, refreshStatus]);
+
+    const handleCopySupportContact = useCallback(async (contactValue) => {
+        const value = contactValue || PLUGIN_SUPPORT_CONTACT;
+
+        if (typeof navigator === "undefined" || !navigator.clipboard || !navigator.clipboard.writeText) {
+            showToast("Môi trường hiện tại chưa hỗ trợ sao chép nhanh.", "warning");
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(value);
+            showToast("Đã sao chép thông tin hỗ trợ.", "success");
+        } catch (error) {
+            showToast("Không thể sao chép thông tin hỗ trợ.", "error");
+        }
+    }, [showToast]);
 
     const submitLogin = useCallback(async ({ email, password }) => {
         const data = await requestJson("/auth/login", {
@@ -915,8 +981,16 @@ export const App = () => {
         })
     ), [submitGenerateRequest]);
 
+    const pluginVersion = getPluginVersion();
+    const environmentSummary = getPluginEnvironmentSummary();
     const shellLocked = authStatus !== "authenticated";
+    const pluginBusy = refreshStatus === "refreshing";
     const entitlementUi = getEntitlementUiState(entitlement);
+    const supportContactValue = entitlementUi.supportContact || PLUGIN_SUPPORT_CONTACT || "";
+    const supportContactDisplay = supportContactValue.replace(/^mailto:/i, "");
+    const supportContactLink = supportContactValue
+        ? (supportContactValue.startsWith("mailto:") ? supportContactValue : `mailto:${supportContactValue}`)
+        : PLUGIN_SUPPORT_LINK;
     const currentUser = userProfile ? {
         displayName: userProfile.displayName || userProfile.email || "Người dùng",
         identifier: userProfile.email || "Chưa có email"
@@ -950,6 +1024,87 @@ export const App = () => {
         onRecordHistory: handleRecordHistory,
         historyRestoreRequest
     }), [handleBlockedInteraction, handleRecordHistory, historyRestoreRequest, shellLocked, submitGenerate]);
+
+    const settingsSections = useMemo(() => ([
+        {
+            title: "Ngôn ngữ",
+            items: [
+                {
+                    id: "language",
+                    type: "static",
+                    label: "Ngôn ngữ hiện tại",
+                    description: "Pass này chỉ hỗ trợ một ngôn ngữ duy nhất để tránh tạo kỳ vọng sai về i18n.",
+                    value: "Tiếng Việt"
+                },
+                {
+                    id: "toast-mode",
+                    type: "segmented",
+                    settingKey: "toastMode",
+                    label: "Thông báo tác vụ",
+                    description: "Setting local trên máy này. Chỉ đổi mức chi tiết của toast, không sync qua backend.",
+                    value: pluginSettings.toastMode,
+                    options: [
+                        { value: "compact", label: "Rút gọn" },
+                        { value: "detailed", label: "Chi tiết" }
+                    ]
+                }
+            ]
+        },
+        {
+            title: "Thông tin phiên bản plugin",
+            items: [
+                {
+                    id: "plugin-name",
+                    type: "static",
+                    label: "Tên plugin",
+                    description: "Thông tin brand đang render ở shell hiện tại.",
+                    value: PLUGIN_DISPLAY_NAME
+                },
+                {
+                    id: "plugin-version",
+                    type: "static",
+                    label: "Version hiện tại",
+                    description: "Đọc từ manifest của plugin. Không có action kiểm tra cập nhật trong pass này.",
+                    value: pluginVersion
+                },
+                {
+                    id: "plugin-environment",
+                    type: "static",
+                    label: "Môi trường",
+                    description: environmentSummary.detail || "Không có endpoint shell đang hoạt động để hiển thị thêm.",
+                    value: environmentSummary.label
+                }
+            ]
+        },
+        {
+            title: "Liên hệ hỗ trợ",
+            items: [
+                {
+                    id: "support-contact",
+                    type: "actions",
+                    label: "Kênh hỗ trợ",
+                    description: "Khi cần hỗ trợ, hãy chia sẻ email đăng nhập, thời điểm gặp lỗi và ảnh chụp trạng thái hiện tại.",
+                    value: supportContactDisplay || "Chưa có thông tin hỗ trợ",
+                    actions: [
+                        {
+                            id: "copy-support",
+                            label: "Sao chép liên hệ",
+                            onClick: () => handleCopySupportContact(supportContactDisplay)
+                        }
+                    ],
+                    link: supportContactLink
+                }
+            ]
+        }
+    ]), [
+        environmentSummary.detail,
+        environmentSummary.label,
+        handleCopySupportContact,
+        pluginSettings.toastMode,
+        pluginVersion,
+        supportContactDisplay,
+        supportContactLink
+    ]);
 
     const tabsMarkup = useMemo(() => (
         TABS.map((tab) => {
@@ -1020,6 +1175,7 @@ export const App = () => {
                 planSummary={currentPlan}
                 creditSummary={currentCredit}
                 refreshStatus={refreshStatus}
+                actionsDisabled={pluginBusy}
                 onAction={handleHeaderAction}
             />
 
@@ -1027,6 +1183,7 @@ export const App = () => {
                 <TabNavigation
                     tabs={TABS}
                     activeTab={activeTab}
+                    disabled={pluginBusy}
                     onTabSelect={handleTabChange}
                 />
 
@@ -1049,7 +1206,9 @@ export const App = () => {
 
                     {activeAuxScreen === "settings" ? (
                         <ShellSettingsView
-                            sections={SHELL_SETTINGS}
+                            sections={settingsSections}
+                            pluginBusy={pluginBusy}
+                            onSettingChange={updatePluginSettings}
                             onClose={() => setActiveAuxScreen(null)}
                         />
                     ) : null}
@@ -1069,10 +1228,10 @@ export const App = () => {
                     entitlementSyncError,
                     historyItems,
                     historyStatus,
-                    historyError,
-                    purchaseOptions: PURCHASE_OPTIONS
+                    historyError
                 }}
                 userProfile={userProfile}
+                purchaseGateway={purchaseGateway}
                 onClose={closeModal}
                 onReloadHistory={refreshHistory}
                 onHistoryReinsert={handleHistoryReinsert}
@@ -1080,6 +1239,7 @@ export const App = () => {
                 onOpenPurchase={() => setActiveModal("purchase")}
                 onOpenCreditSubscription={openCreditSubscription}
                 onOpenSupport={openSupportModal}
+                onSyncShell={refreshShell}
                 onConfirmRefresh={refreshShell}
                 onLogout={performLogout}
                 authActions={{
@@ -1106,6 +1266,11 @@ export const App = () => {
                     {toast.message}
                 </div>
             ) : null}
+
+            <div className={`app-overlay ${pluginBusy ? "active" : ""}`}>
+                <div className="spinner-ring"></div>
+                <div className="overlay-text">Đang đồng bộ lại dữ liệu plugin...</div>
+            </div>
         </div>
     );
 };

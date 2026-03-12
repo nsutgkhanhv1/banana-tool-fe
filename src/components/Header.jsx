@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { PLUGIN_DISPLAY_NAME } from "../lib/plugin-config.js";
 
 const AUTHENTICATED_MENU_ITEMS = [
     { id: "account", label: "Tài khoản" },
@@ -13,7 +14,7 @@ const GUEST_MENU_ITEMS = [
     { id: "purchase", label: "Mua gói" }
 ];
 
-export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus, onAction }) => {
+export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus, actionsDisabled, onAction }) => {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef(null);
     const isAuthenticated = userSummary.identifier !== "Chưa đăng nhập";
@@ -35,6 +36,10 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
     }, [menuOpen]);
 
     const handleMenuAction = (action) => {
+        if (actionsDisabled) {
+            return;
+        }
+
         setMenuOpen(false);
         onAction(action);
     };
@@ -48,7 +53,7 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
                     </svg>
                 </div>
                 <div className="brand-copy">
-                    <span className="brand-title">Nano AI <span className="brand-badge">PRO</span></span>
+                    <span className="brand-title">{PLUGIN_DISPLAY_NAME}</span>
                     <span className="brand-subtitle">Plugin shell & điều hướng</span>
                 </div>
             </div>
@@ -58,6 +63,7 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
                     className={`entitlement-summary entitlement-${creditSummary.severity || "neutral"}`}
                     onClick={() => onAction("credit-subscription")}
                     title="Xem Credit & Subscription"
+                    disabled={actionsDisabled}
                 >
                     <div className="plan-chip">
                         <span className="chip-label">Gói</span>
@@ -74,24 +80,24 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
                     </div>
                 </button>
 
-                <button className="btn" onClick={() => onAction("purchase")}>
+                <button className="btn" onClick={() => onAction("purchase")} disabled={actionsDisabled}>
                     Mua gói
                 </button>
 
-                <button className="btn" onClick={() => onAction("history")}>
+                <button className="btn" onClick={() => onAction("history")} disabled={actionsDisabled}>
                     Lịch sử
                 </button>
 
-                <button className="btn icon-with-label" onClick={() => onAction("refresh")} title="Làm mới shell">
+                <button className="btn icon-with-label" onClick={() => onAction("refresh")} title="Làm mới plugin" disabled={actionsDisabled}>
                     <svg className={refreshStatus === "refreshing" ? "spinner" : ""} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="23 4 23 10 17 10"></polyline>
                         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                     </svg>
-                    <span>{refreshStatus === "refreshing" ? "Đang làm mới" : "Refresh"}</span>
+                    <span>{refreshStatus === "refreshing" ? "Đang làm mới" : "Làm mới"}</span>
                 </button>
 
                 <div className="account-menu" ref={menuRef}>
-                    <button className="account-trigger" onClick={() => setMenuOpen((value) => !value)}>
+                    <button className="account-trigger" onClick={() => !actionsDisabled && setMenuOpen((value) => !value)} disabled={actionsDisabled}>
                         <div className="account-trigger-copy">
                             <strong>{userSummary.displayName}</strong>
                             <span>{userSummary.identifier}</span>

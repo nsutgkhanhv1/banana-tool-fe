@@ -1,15 +1,15 @@
 import React from "react";
 
-export const ShellSettingsView = ({ sections, onClose }) => (
+export const ShellSettingsView = ({ sections, pluginBusy, onSettingChange, onClose }) => (
     <div className="settings-view">
         <div className="settings-header">
             <div>
                 <span className="pill-tag">Full view</span>
                 <h2>Cài đặt</h2>
-                <p>Không mở bằng modal. Đóng màn hình này sẽ đưa user về đúng tab đang làm dở.</p>
+                <p>Đây là màn hình full-view của shell. Quay lại sẽ giữ nguyên tab và form state hiện tại nếu tab đó đã giữ state sẵn.</p>
             </div>
-            <button className="btn" onClick={onClose}>
-                Quay lại shell
+            <button className="btn" onClick={onClose} disabled={pluginBusy}>
+                Quay lại
             </button>
         </div>
 
@@ -19,12 +19,50 @@ export const ShellSettingsView = ({ sections, onClose }) => (
                     <h3>{section.title}</h3>
                     <div className="settings-list">
                         {section.items.map((item) => (
-                            <div key={item.label} className="settings-row">
-                                <div>
+                            <div key={item.id || item.label} className="settings-row">
+                                <div className="settings-row-copy">
                                     <strong>{item.label}</strong>
                                     <p>{item.description}</p>
                                 </div>
-                                <span className="settings-value">{item.value}</span>
+
+                                <div className="settings-row-side">
+                                    {item.type === "segmented" ? (
+                                        <div className="segmented-control settings-segmented-control">
+                                            {item.options.map((option) => (
+                                                <button
+                                                    key={option.value}
+                                                    className={`segment-btn ${item.value === option.value ? "active" : ""}`}
+                                                    onClick={() => onSettingChange({ [item.settingKey]: option.value })}
+                                                    disabled={pluginBusy || item.value === option.value}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : null}
+
+                                    {item.type === "actions" ? (
+                                        <div className="settings-actions">
+                                            <span className="settings-value">{item.value}</span>
+                                            <div className="settings-action-row">
+                                                {item.actions && item.actions.length ? item.actions.map((action) => (
+                                                    <button
+                                                        key={action.id}
+                                                        className="btn"
+                                                        onClick={action.onClick}
+                                                        disabled={pluginBusy}
+                                                    >
+                                                        {action.label}
+                                                    </button>
+                                                )) : null}
+                                            </div>
+                                        </div>
+                                    ) : null}
+
+                                    {item.type !== "segmented" && item.type !== "actions" ? (
+                                        <span className="settings-value">{item.value}</span>
+                                    ) : null}
+                                </div>
                             </div>
                         ))}
                     </div>

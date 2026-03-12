@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { formatPriceVnd, getPurchasePackagePrimaryValue } from "../lib/purchase.js";
 
 const ModalFrame = ({ title, subtitle, onClose, canClose, children }) => (
     <div className="modal-backdrop">
@@ -94,6 +95,71 @@ const PasswordField = ({ label, value, onChange, disabled, autoComplete, placeho
 const InlineError = ({ message }) => (
     message ? <div className="form-error">{message}</div> : null
 );
+
+const PURCHASE_TYPE_OPTIONS = [
+    {
+        id: "credit",
+        title: "Mua credit",
+        description: "Nạp thêm credit dùng ngay khi admin xác nhận thủ công giao dịch chuyển khoản."
+    },
+    {
+        id: "subscription",
+        title: "Mua subscription",
+        description: "Mua gói theo thời hạn với quota credit theo tháng, vẫn duyệt thủ công bởi admin."
+    }
+];
+
+const PURCHASE_STATUS_LABELS = {
+    draft: "Chờ chuyển khoản",
+    expired: "Đã hết hạn",
+    pending_admin_review: "Chờ admin duyệt",
+    approved: "Đã duyệt",
+    rejected: "Bị từ chối"
+};
+
+const formatPurchaseDate = (timestamp) => {
+    if (!timestamp) {
+        return "Chưa có dữ liệu";
+    }
+
+    return new Date(timestamp).toLocaleString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+};
+
+const formatPurchaseRemainingTime = (expiresAt, now) => {
+    if (!expiresAt) {
+        return "Không xác định";
+    }
+
+    const remainingMs = Math.max(expiresAt - now, 0);
+    const totalSeconds = Math.floor(remainingMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    if (remainingMs <= 0) {
+        return "Đã hết hạn";
+    }
+
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+const copyTextToClipboard = async (value) => {
+    if (!value) {
+        throw new Error("Không có dữ liệu để sao chép.");
+    }
+
+    if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(value);
+        return;
+    }
+
+    throw new Error("Môi trường hiện tại chưa hỗ trợ sao chép nhanh.");
+};
 
 const AuthModal = ({ config, authActions, onClose }) => {
     const [view, setView] = useState(config.initialView || "login");
@@ -714,30 +780,614 @@ const HistoryModal = ({
     );
 };
 
-const PurchaseModal = ({ options, onClose }) => (
-    <ModalFrame
-        title="Mua gói"
-        subtitle="Điểm vào riêng cho flow mua credit hoặc subscription."
-        onClose={onClose}
-        canClose={true}
-    >
+const PurchaseModal = ({ userProfile, purchaseGateway, onClose, onOpenCreditSubscription, onSyncShell }) => {
+    const [selectedType, setSelectedType] = useState("");
+    const [packages, setPackages] = useState([]);
+    const [currentOrder, setCurrentOrder] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [notice, setNotice] = useState("");
+    const [error, setError] = useState("");
+    const [now, setNow] = useState(Date.now());
+    const [qrFailed, setQrFailed] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadPurchaseState = async () => {
+            if (!userProfile || !purchaseGateway) {
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            setError("");
+
+            try {
+                const [catalog, openOrder] = await Promise.all([
+                    purchaseGateway.listPackages(),
+                    purchaseGateway.getOpenOrder({ userId: userProfile.id })
+                ]);
+
+                if (cancelled) {
+                    return;
+                }
+
+                setPackages(catalog);
+                setCurrentOrder(openOrder);
+                setSelectedType(openOrder ? openOrder.purchaseType : "");
+                setNotice(openOrder
+                    ? "Đã resume yêu cầu đang mở của bạn. Mỗi tài khoản chỉ có một order draft hoặc chờ duyệt tại một thời điểm."
+                    : "");
+                setQrFailed(false);
+            } catch (nextError) {
+                if (!cancelled) {
+                    setError(getApiErrorMessage(nextError));
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        loadPurchaseState();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [purchaseGateway, userProfile]);
+
+    useEffect(() => {
+        if (!currentOrder || currentOrder.status !== "pending_admin_review" || !purchaseGateway || !userProfile) {
+            return undefined;
+        }
+
+        const timer = setInterval(async () => {
+            try {
+                const refreshedOrder = await purchaseGateway.getOrder({
+                    userId: userProfile.id,
+                    orderId: currentOrder.orderId
+                });
+
+                if (!refreshedOrder) {
+                    return;
+                }
+
+                setCurrentOrder(refreshedOrder);
+                if (refreshedOrder.status === "approved" && onSyncShell) {
+                    onSyncShell();
+                }
+            } catch (nextError) {
+                // Keep polling silently for local/mock adapter and future backend retries.
+            }
+        }, 8000);
+
+        return () => clearInterval(timer);
+    }, [currentOrder, onSyncShell, purchaseGateway, userProfile]);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setNow(Date.now());
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        if (!currentOrder || currentOrder.status !== "draft" || !currentOrder.expiresAt || currentOrder.expiresAt > now || !purchaseGateway || !userProfile) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const refreshExpiredOrder = async () => {
+            try {
+                const nextOrder = await purchaseGateway.getOrder({
+                    userId: userProfile.id,
+                    orderId: currentOrder.orderId
+                });
+                if (!cancelled && nextOrder) {
+                    setCurrentOrder(nextOrder);
+                }
+            } catch (nextError) {
+                if (!cancelled) {
+                    setError(getApiErrorMessage(nextError));
+                }
+            }
+        };
+
+        refreshExpiredOrder();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [currentOrder, now, purchaseGateway, userProfile]);
+
+    if (!userProfile) {
+        return null;
+    }
+
+    const currentStep = currentOrder
+        ? currentOrder.status === "draft"
+            ? 3
+            : 4
+        : selectedType
+            ? 2
+            : 1;
+    const filteredPackages = packages.filter((item) => item.purchaseType === selectedType);
+    const currentPackage = currentOrder ? currentOrder.packageSnapshot : null;
+    const currentStatusLabel = currentOrder ? (PURCHASE_STATUS_LABELS[currentOrder.status] || currentOrder.status) : "";
+    const expiresInLabel = currentOrder && currentOrder.status === "draft"
+        ? formatPurchaseRemainingTime(currentOrder.expiresAt, now)
+        : "";
+
+    const handleCopy = async (value, successMessage) => {
+        try {
+            await copyTextToClipboard(value);
+            setNotice(successMessage);
+            setError("");
+        } catch (nextError) {
+            setError(getApiErrorMessage(nextError));
+        }
+    };
+
+    const handleSelectType = (purchaseType) => {
+        setSelectedType(purchaseType);
+        setNotice("");
+        setError("");
+    };
+
+    const handleSelectPackage = async (pkg) => {
+        if (!purchaseGateway) {
+            return;
+        }
+
+        setSubmitting(true);
+        setError("");
+        setNotice("");
+
+        try {
+            const result = await purchaseGateway.createDraftOrder({
+                userId: userProfile.id,
+                userEmail: userProfile.email,
+                packageId: pkg.id
+            });
+            setCurrentOrder(result.order);
+            setSelectedType(result.order.purchaseType);
+            setQrFailed(false);
+            setNotice(result.resumedExisting
+                ? "Bạn đã có một yêu cầu đang mở nên plugin đưa bạn quay lại order hiện tại."
+                : "Order draft đã được tạo. Chuyển khoản theo đúng nội dung để admin đối soát thủ công.");
+        } catch (nextError) {
+            setError(getApiErrorMessage(nextError));
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleConfirmTransferred = async () => {
+        if (!purchaseGateway || !currentOrder) {
+            return;
+        }
+
+        setSubmitting(true);
+        setError("");
+        setNotice("");
+
+        try {
+            const nextOrder = await purchaseGateway.confirmTransferred({
+                userId: userProfile.id,
+                orderId: currentOrder.orderId
+            });
+            setCurrentOrder(nextOrder);
+            setNotice("Đã ghi nhận thao tác của bạn. Yêu cầu hiện đang chờ admin kiểm tra giao dịch thủ công.");
+        } catch (nextError) {
+            setError(getApiErrorMessage(nextError));
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleRefreshOrder = async () => {
+        if (!purchaseGateway || !currentOrder) {
+            return;
+        }
+
+        setSubmitting(true);
+        setError("");
+
+        try {
+            const nextOrder = await purchaseGateway.getOrder({
+                userId: userProfile.id,
+                orderId: currentOrder.orderId
+            });
+
+            if (nextOrder) {
+                setCurrentOrder(nextOrder);
+                if (nextOrder.status === "approved" && onSyncShell) {
+                    await onSyncShell();
+                }
+            }
+        } catch (nextError) {
+            setError(getApiErrorMessage(nextError));
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleStartNewOrder = () => {
+        setCurrentOrder(null);
+        setSelectedType(currentOrder ? currentOrder.purchaseType : "");
+        setNotice("");
+        setError("");
+        setQrFailed(false);
+    };
+
+    const handleViewOtherPackages = () => {
+        setCurrentOrder(null);
+        setSelectedType(currentOrder ? currentOrder.purchaseType : "");
+        setNotice("Bạn vẫn đang có một draft order mở. Chọn gói khác lúc này sẽ quay lại order hiện tại cho tới khi có flow hủy hoặc tạo lại draft.");
+        setError("");
+        setQrFailed(false);
+    };
+
+    const renderStepHeader = () => (
+        <div className="purchase-stepper">
+            <div className={`purchase-step ${currentStep >= 1 ? "is-active" : ""}`}>
+                <span>1</span>
+                <strong>Loại mua</strong>
+            </div>
+            <div className={`purchase-step ${currentStep >= 2 ? "is-active" : ""}`}>
+                <span>2</span>
+                <strong>Gói</strong>
+            </div>
+            <div className={`purchase-step ${currentStep >= 3 ? "is-active" : ""}`}>
+                <span>3</span>
+                <strong>Chuyển khoản</strong>
+            </div>
+            <div className={`purchase-step ${currentStep >= 4 ? "is-active" : ""}`}>
+                <span>4</span>
+                <strong>Chờ duyệt</strong>
+            </div>
+        </div>
+    );
+
+    const renderTypeSelection = () => (
         <div className="modal-stack">
-            {options.map((option) => (
-                <div key={option.id} className="purchase-card">
-                    <div>
-                        <span className="pill-tag">Ưu tiên</span>
+            <div className="info-banner">
+                Chọn loại mua trước, sau đó plugin sẽ tạo đúng một order draft để sinh mã chuyển khoản và theo dõi trạng thái thủ công.
+            </div>
+            <div className="purchase-choice-grid">
+                {PURCHASE_TYPE_OPTIONS.map((option) => (
+                    <button
+                        key={option.id}
+                        className={`purchase-choice-card ${selectedType === option.id ? "is-selected" : ""}`}
+                        onClick={() => handleSelectType(option.id)}
+                    >
+                        <span className="pill-tag">{option.id === "credit" ? "Credit" : "Subscription"}</span>
                         <h3>{option.title}</h3>
                         <p>{option.description}</p>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+
+    const renderPackageSelection = () => (
+        <div className="modal-stack">
+            <div className="purchase-inline-header">
+                <button className="back-link" onClick={() => setSelectedType("")}>
+                    ← Chọn lại loại mua
+                </button>
+                <span className="pill-tag">{selectedType === "credit" ? "Credit" : "Subscription"}</span>
+            </div>
+            {filteredPackages.length ? (
+                filteredPackages.map((pkg) => (
+                    <div key={pkg.id} className="purchase-card purchase-card-selectable">
+                        <div>
+                            <span className="pill-tag">{getPurchasePackagePrimaryValue(pkg)}</span>
+                            <h3>{pkg.displayName}</h3>
+                            <p>{pkg.description}</p>
+                        </div>
+                        <div className="purchase-meta">
+                            <strong>{formatPriceVnd(pkg.priceVnd)}đ</strong>
+                            <span className="purchase-meta-note">{selectedType === "credit" ? "Credit cộng sau khi admin duyệt" : "Subscription kích hoạt/gia hạn sau khi admin duyệt"}</span>
+                            <button className="btn primary" onClick={() => handleSelectPackage(pkg)} disabled={submitting}>
+                                {submitting ? "Đang tạo order..." : "Chọn gói này"}
+                            </button>
+                        </div>
                     </div>
-                    <div className="purchase-meta">
-                        <strong>{option.price}</strong>
-                        <button className="btn">Bắt đầu</button>
+                ))
+            ) : (
+                <div className="info-banner">
+                    Hiện chưa có gói khả dụng cho loại mua này.
+                </div>
+            )}
+        </div>
+    );
+
+    const renderPaymentView = () => (
+        <div className="modal-stack">
+            <div className="purchase-inline-header">
+                <button className="back-link" onClick={handleViewOtherPackages}>
+                    ← Xem gói khác
+                </button>
+                <span className={`purchase-status-badge status-${currentOrder.status}`}>{currentStatusLabel}</span>
+            </div>
+
+            <div className="form-error purchase-manual-banner">
+                Đây là thanh toán chuyển khoản thủ công. Sau khi bạn bấm "Tôi đã chuyển khoản", admin sẽ kiểm tra giao dịch ngân hàng trước khi cộng credit hoặc kích hoạt subscription.
+            </div>
+
+            <div className="summary-grid">
+                <div className="summary-tile">
+                    <span className="summary-label">Loại mua</span>
+                    <strong>{currentOrder.purchaseType === "credit" ? "Credit" : "Subscription"}</strong>
+                    <span>{getPurchasePackagePrimaryValue(currentPackage)}</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Gói đã chọn</span>
+                    <strong>{currentPackage.displayName}</strong>
+                    <span>{currentPackage.description}</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Số tiền</span>
+                    <strong>{formatPriceVnd(currentOrder.priceVnd)}đ</strong>
+                    <span>Chốt tại thời điểm tạo order.</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Mã order</span>
+                    <strong>{currentOrder.orderCode}</strong>
+                    <span>Dùng để admin đối soát nội dung chuyển khoản.</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Hiệu lực draft</span>
+                    <strong>{expiresInLabel}</strong>
+                    <span>Draft order hết hạn sau 30 phút nếu chưa xác nhận chuyển khoản.</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Tạo lúc</span>
+                    <strong>{formatPurchaseDate(currentOrder.createdAt)}</strong>
+                    <span>Hết hạn lúc {formatPurchaseDate(currentOrder.expiresAt)}</span>
+                </div>
+            </div>
+
+            <div className="purchase-payment-layout">
+                <div className="account-detail-card">
+                    <span className="summary-label">Thông tin chuyển khoản</span>
+                    <strong>{currentOrder.bankAccount.bankName}</strong>
+                    <span>Chủ tài khoản: {currentOrder.bankAccount.accountHolder}</span>
+                    <span>Số tài khoản: {currentOrder.bankAccount.accountNumber}</span>
+                    <div className="purchase-copy-row">
+                        <button className="btn" onClick={() => handleCopy(currentOrder.bankAccount.accountNumber, "Đã sao chép số tài khoản.")}>
+                            Copy STK
+                        </button>
+                        <button className="btn" onClick={() => handleCopy(currentOrder.transferContent, "Đã sao chép nội dung chuyển khoản.")}>
+                            Copy nội dung
+                        </button>
+                        <button className="btn" onClick={() => handleCopy(currentOrder.orderCode, "Đã sao chép mã order.")}>
+                            Copy mã order
+                        </button>
                     </div>
                 </div>
-            ))}
+
+                <div className="account-detail-card purchase-transfer-card">
+                    <span className="summary-label">Nội dung chuyển khoản chuẩn</span>
+                    <strong>{currentOrder.transferContent}</strong>
+                    <span>Giữ nguyên nội dung này để admin tìm giao dịch đúng order nhanh hơn.</span>
+                </div>
+
+                <div className="account-detail-card purchase-qr-card">
+                    <span className="summary-label">QR thanh toán</span>
+                    {!qrFailed && currentOrder.qrImageUrl ? (
+                        <img
+                            className="purchase-qr-image"
+                            src={currentOrder.qrImageUrl}
+                            alt={`QR thanh toán cho ${currentOrder.orderCode}`}
+                            onError={() => setQrFailed(true)}
+                        />
+                    ) : (
+                        <div className="purchase-qr-fallback">
+                            <strong>QR chưa tải được</strong>
+                            <span>Bạn vẫn có thể chuyển khoản thủ công bằng đúng số tài khoản, số tiền và nội dung bên cạnh.</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="modal-actions">
+                <button className="btn primary" onClick={handleConfirmTransferred} disabled={submitting || currentOrder.status !== "draft" || expiresInLabel === "Đã hết hạn"}>
+                    {submitting ? "Đang cập nhật..." : "Tôi đã chuyển khoản"}
+                </button>
+                <button className="btn" onClick={handleRefreshOrder} disabled={submitting}>
+                    Làm mới trạng thái
+                </button>
+            </div>
         </div>
-    </ModalFrame>
-);
+    );
+
+    const renderWaitingView = () => (
+        <div className="modal-stack">
+            <div className="success-banner">
+                Yêu cầu của bạn đã được ghi nhận. Admin sẽ kiểm tra thủ công giao dịch ngân hàng trước khi duyệt.
+            </div>
+            <div className="summary-grid">
+                <div className="summary-tile">
+                    <span className="summary-label">Trạng thái</span>
+                    <strong>{currentStatusLabel}</strong>
+                    <span>Plugin đang giữ order ở chế độ chỉ theo dõi.</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Gói</span>
+                    <strong>{currentPackage.displayName}</strong>
+                    <span>{getPurchasePackagePrimaryValue(currentPackage)}</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Số tiền</span>
+                    <strong>{formatPriceVnd(currentOrder.priceVnd)}đ</strong>
+                    <span>Nội dung chuyển khoản: {currentOrder.transferContent}</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Đã xác nhận lúc</span>
+                    <strong>{formatPurchaseDate(currentOrder.confirmedTransferredAt)}</strong>
+                    <span>Admin sẽ đối soát theo số tiền và mã order.</span>
+                </div>
+            </div>
+            <div className="account-detail-card">
+                <span className="summary-label">Lưu ý</span>
+                <strong>Thanh toán thủ công chưa dùng ngay</strong>
+                <span>Quyền sử dụng chỉ được cập nhật sau khi admin duyệt. Bạn có thể đóng modal, mở lại sau để theo dõi tiếp.</span>
+            </div>
+            <div className="modal-actions">
+                <button className="btn primary" onClick={handleRefreshOrder} disabled={submitting}>
+                    {submitting ? "Đang kiểm tra..." : "Kiểm tra lại trạng thái"}
+                </button>
+                <button className="btn" onClick={onClose}>
+                    Đóng
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderApprovedView = () => (
+        <div className="modal-stack">
+            <div className="success-banner">
+                Order đã được duyệt. Plugin sẽ đồng bộ lại entitlement để cập nhật credit hoặc subscription mới nhất.
+            </div>
+            <div className="summary-grid">
+                <div className="summary-tile">
+                    <span className="summary-label">Gói</span>
+                    <strong>{currentPackage.displayName}</strong>
+                    <span>{getPurchasePackagePrimaryValue(currentPackage)}</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Duyệt lúc</span>
+                    <strong>{formatPurchaseDate(currentOrder.approvedAt)}</strong>
+                    <span>Mã order {currentOrder.orderCode}</span>
+                </div>
+            </div>
+            <div className="modal-actions">
+                <button className="btn primary" onClick={onOpenCreditSubscription}>
+                    Xem Credit & Subscription
+                </button>
+                <button className="btn" onClick={onClose}>
+                    Đóng
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderRejectedView = () => (
+        <div className="modal-stack">
+            <div className="form-error">
+                Order đã bị từ chối. Bạn có thể tạo yêu cầu mới sau khi kiểm tra lại nội dung và giao dịch chuyển khoản.
+            </div>
+            <div className="summary-grid">
+                <div className="summary-tile">
+                    <span className="summary-label">Mã order</span>
+                    <strong>{currentOrder.orderCode}</strong>
+                    <span>{currentPackage.displayName}</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Lý do</span>
+                    <strong>{currentOrder.rejectionReason || "Chưa có lý do chi tiết"}</strong>
+                    <span>Từ chối lúc {formatPurchaseDate(currentOrder.rejectedAt)}</span>
+                </div>
+            </div>
+            <div className="modal-actions">
+                <button className="btn primary" onClick={handleStartNewOrder}>
+                    Tạo order mới
+                </button>
+                <button className="btn" onClick={onClose}>
+                    Đóng
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderExpiredView = () => (
+        <div className="modal-stack">
+            <div className="form-error">
+                Draft order đã hết hạn trước khi bạn xác nhận chuyển khoản. Vui lòng tạo order mới để lấy lại mã chuyển khoản và thời hạn 30 phút.
+            </div>
+            <div className="summary-grid">
+                <div className="summary-tile">
+                    <span className="summary-label">Mã order cũ</span>
+                    <strong>{currentOrder.orderCode}</strong>
+                    <span>{currentPackage.displayName}</span>
+                </div>
+                <div className="summary-tile">
+                    <span className="summary-label">Hết hạn lúc</span>
+                    <strong>{formatPurchaseDate(currentOrder.expiresAt)}</strong>
+                    <span>Order cũ vẫn được lưu cho mục đích tra cứu ngoại lệ.</span>
+                </div>
+            </div>
+            <div className="modal-actions">
+                <button className="btn primary" onClick={handleStartNewOrder}>
+                    Tạo order mới
+                </button>
+                <button className="btn" onClick={onClose}>
+                    Đóng
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderContent = () => {
+        if (loading) {
+            return (
+                <div className="modal-stack">
+                    <div className="info-banner">Đang tải catalog gói và order đang mở...</div>
+                </div>
+            );
+        }
+
+        if (currentOrder) {
+            if (currentOrder.status === "draft") {
+                return renderPaymentView();
+            }
+
+            if (currentOrder.status === "pending_admin_review") {
+                return renderWaitingView();
+            }
+
+            if (currentOrder.status === "approved") {
+                return renderApprovedView();
+            }
+
+            if (currentOrder.status === "rejected") {
+                return renderRejectedView();
+            }
+
+            if (currentOrder.status === "expired") {
+                return renderExpiredView();
+            }
+        }
+
+        if (selectedType) {
+            return renderPackageSelection();
+        }
+
+        return renderTypeSelection();
+    };
+
+    return (
+        <ModalFrame
+            title="Mua gói"
+            subtitle="Chọn credit hoặc subscription, lấy thông tin chuyển khoản và theo dõi trạng thái admin duyệt thủ công."
+            onClose={onClose}
+            canClose={true}
+        >
+            <div className="modal-stack">
+                {renderStepHeader()}
+                {notice ? <div className="success-banner">{notice}</div> : null}
+                <InlineError message={error} />
+                {renderContent()}
+            </div>
+        </ModalFrame>
+    );
+};
 
 const CreditSubscriptionModal = ({ summaries, helpers, refreshStatus, onClose, onOpenPurchase, onOpenSupport, onConfirmRefresh }) => {
     const { entitlement, entitlementUi, entitlementSyncError } = summaries;
@@ -855,14 +1505,14 @@ const SupportModal = ({ supportContact, onClose }) => (
 
 const RefreshConfirmModal = ({ onClose, onConfirmRefresh, refreshStatus }) => (
     <ModalFrame
-        title="Xác nhận làm mới shell"
+        title="Xác nhận làm mới plugin"
         subtitle="Plugin sẽ đồng bộ lại session, user, credit, gói và dữ liệu shell liên quan."
         onClose={onClose}
         canClose={refreshStatus !== "refreshing"}
     >
         <div className="modal-stack">
             <div className="info-banner">
-                Thao tác này giữ nguyên tab hiện tại và chỉ làm mới dữ liệu toàn cục cần thiết.
+                Thao tác này sẽ khóa plugin tạm thời, giữ nguyên tab hiện tại và chỉ đồng bộ lại dữ liệu đang có nguồn thật trong shell.
             </div>
             <div className="modal-actions">
                 <button className="btn primary" onClick={onConfirmRefresh} disabled={refreshStatus === "refreshing"}>
@@ -1139,6 +1789,9 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                 <button className="btn" onClick={onOpenCreditSubscription}>
                     Xem Credit & Subscription
                 </button>
+                <button className="btn" onClick={onOpenPurchase}>
+                    Mua credit / subscription
+                </button>
                 <button className="btn danger" onClick={onLogout}>
                     Đăng xuất
                 </button>
@@ -1331,6 +1984,7 @@ export const ShellModalHost = ({
     authModalConfig,
     summaries,
     userProfile,
+    purchaseGateway,
     authActions,
     helpers,
     onClose,
@@ -1340,6 +1994,7 @@ export const ShellModalHost = ({
     onOpenPurchase,
     onOpenCreditSubscription,
     onOpenSupport,
+    onSyncShell,
     onConfirmRefresh,
     onLogout
 }) => {
@@ -1403,7 +2058,15 @@ export const ShellModalHost = ({
     }
 
     if (activeModal === "purchase") {
-        return <PurchaseModal options={summaries.purchaseOptions} onClose={onClose} />;
+        return (
+            <PurchaseModal
+                userProfile={userProfile}
+                purchaseGateway={purchaseGateway}
+                onClose={onClose}
+                onOpenCreditSubscription={onOpenCreditSubscription}
+                onSyncShell={onSyncShell}
+            />
+        );
     }
 
     if (activeModal === "support") {
