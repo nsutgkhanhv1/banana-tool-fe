@@ -770,6 +770,13 @@ export const App = () => {
         })
     ), [submitGenerateRequest]);
 
+    const submitPhucCheAnhGenerate = useCallback(async (payload) => (
+        submitGenerateRequest({
+            path: "/images/phuc-che-anh/generate",
+            body: payload
+        })
+    ), [submitGenerateRequest]);
+
     const shellLocked = authStatus !== "authenticated";
     const entitlementUi = getEntitlementUiState(entitlement);
     const currentUser = userProfile ? {
@@ -817,12 +824,29 @@ export const App = () => {
                         refreshVersion={tabRefreshVersion}
                         actionsDisabled={tabProps.actionsDisabled}
                         onRequireAuth={tabProps.onRequireAuth}
-                        onGenerate={tab.id === "tudoai" ? submitTuDoAIGenerate : tab.id === "thaynen" ? submitThayNenGenerate : tabProps.onGenerate}
+                        onGenerate={
+                            tab.id === "tudoai"
+                                ? submitTuDoAIGenerate
+                                : tab.id === "thaynen"
+                                    ? submitThayNenGenerate
+                                    : tab.id === "phucche"
+                                        ? submitPhucCheAnhGenerate
+                                        : tabProps.onGenerate
+                        }
                     />
                 </div>
             );
         })
-    ), [activeTab, submitThayNenGenerate, submitTuDoAIGenerate, tabProps.actionsDisabled, tabProps.onGenerate, tabProps.onRequireAuth, tabRefreshVersion]);
+    ), [
+        activeTab,
+        submitPhucCheAnhGenerate,
+        submitThayNenGenerate,
+        submitTuDoAIGenerate,
+        tabProps.actionsDisabled,
+        tabProps.onGenerate,
+        tabProps.onRequireAuth,
+        tabRefreshVersion
+    ]);
 
     if (bootStatus !== "ready") {
         return (
