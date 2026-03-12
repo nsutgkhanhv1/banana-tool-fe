@@ -156,6 +156,45 @@ const resolveRestoredActiveImageId = (items, persistedActiveImageId) => {
     return items[0].id;
 };
 
+const restoreReferenceItemsFromSnapshots = async ({
+    toolKey,
+    snapshots,
+    maxItems,
+    maxFileSizeBytes
+}) => {
+    const restoredItems = [];
+    let missingCount = 0;
+
+    for (const item of (snapshots || []).slice(0, maxItems)) {
+        try {
+            const entry = await getEntryFromPersistentToken(item.persistentToken);
+            const restoredItem = await createReferenceImageItem({
+                toolKey,
+                sourceType: item.sourceType,
+                entry,
+                displayName: item.displayName,
+                persistentToken: item.persistentToken,
+                createdAt: item.createdAt,
+                lastUsedAt: item.lastUsedAt,
+                id: item.id,
+                storagePath: item.storagePath,
+                mimeType: item.mimeType,
+                width: item.width,
+                height: item.height,
+                maxFileSizeBytes
+            });
+            restoredItems.push(restoredItem);
+        } catch (error) {
+            missingCount += 1;
+        }
+    }
+
+    return {
+        items: restoredItems,
+        missingCount
+    };
+};
+
 export const useReferenceImages = ({ toolKey, maxItems, maxFileSizeBytes = DEFAULT_MAX_FILE_SIZE_BYTES }) => {
     const [items, setItems] = useState([]);
     const [activeImageId, setActiveImageId] = useState(null);
@@ -179,43 +218,23 @@ export const useReferenceImages = ({ toolKey, maxItems, maxFileSizeBytes = DEFAU
                 return;
             }
 
-            const restoredItems = [];
-            let missingCount = 0;
-
-            for (const item of persistedState.items.slice(0, maxItems)) {
-                try {
-                    const entry = await getEntryFromPersistentToken(item.persistentToken);
-                    const restoredItem = await createReferenceImageItem({
-                        toolKey,
-                        sourceType: item.sourceType,
-                        entry,
-                        displayName: item.displayName,
-                        persistentToken: item.persistentToken,
-                        createdAt: item.createdAt,
-                        lastUsedAt: item.lastUsedAt,
-                        id: item.id,
-                        storagePath: item.storagePath,
-                        mimeType: item.mimeType,
-                        width: item.width,
-                        height: item.height,
-                        maxFileSizeBytes
-                    });
-                    restoredItems.push(restoredItem);
-                } catch (error) {
-                    missingCount += 1;
-                }
-            }
+            const restored = await restoreReferenceItemsFromSnapshots({
+                toolKey,
+                snapshots: persistedState.items,
+                maxItems,
+                maxFileSizeBytes
+            });
 
             if (cancelled) {
                 return;
             }
 
-            const nextActiveImageId = resolveRestoredActiveImageId(restoredItems, persistedState.activeImageId);
-            setItems(restoredItems);
+            const nextActiveImageId = resolveRestoredActiveImageId(restored.items, persistedState.activeImageId);
+            setItems(restored.items);
             setActiveImageId(nextActiveImageId);
             setRestoreStatus("ready");
 
-            if (missingCount > 0) {
+            if (restored.missingCount > 0) {
                 setRestoreNotice("Một số ảnh tham chiếu cũ không còn khả dụng và đã bị bỏ qua.");
             }
         };
@@ -349,6 +368,33 @@ export const useReferenceImages = ({ toolKey, maxItems, maxFileSizeBytes = DEFAU
         })));
     }, []);
 
+    const restoreFromSnapshots = useCallback(async ({ snapshots, nextActiveImageId }) => {
+        setRestoreStatus("restoring");
+        setRestoreNotice("");
+
+        const restored = await restoreReferenceItemsFromSnapshots({
+            toolKey,
+            snapshots,
+            maxItems,
+            maxFileSizeBytes
+        });
+
+        const resolvedActiveImageId = resolveRestoredActiveImageId(restored.items, nextActiveImageId);
+        setItems(restored.items);
+        setActiveImageId(resolvedActiveImageId);
+        setRestoreStatus("ready");
+
+        if (restored.missingCount > 0) {
+            setRestoreNotice("Một số ảnh tham chiếu trong lịch sử không còn khả dụng và đã bị bỏ qua.");
+        }
+
+        return {
+            items: restored.items,
+            missingCount: restored.missingCount,
+            activeImageId: resolvedActiveImageId
+        };
+    }, [maxFileSizeBytes, maxItems, toolKey]);
+
     return {
         items,
         activeImageId,
@@ -363,6 +409,7 @@ export const useReferenceImages = ({ toolKey, maxItems, maxFileSizeBytes = DEFAU
         addFromQuickLayer,
         removeImage,
         selectActiveImage,
-        touchAllImages
+        touchAllImages,
+        restoreFromSnapshots
     };
 };

@@ -481,57 +481,235 @@ const AuthModal = ({ config, authActions, onClose }) => {
     );
 };
 
-const HistoryModal = ({ items, onClose }) => {
-    const [selectedItem, setSelectedItem] = useState(null);
+const formatHistoryTime = (value, helpers) => {
+    if (helpers && typeof helpers.formatRelativeDate === "function") {
+        return helpers.formatRelativeDate(value);
+    }
+
+    return value ? new Date(value).toLocaleString("vi-VN") : "Chưa có";
+};
+
+const getInsertStatusLabel = (item) => {
+    if (!item || !item.insert) {
+        return "Chưa rõ trạng thái chèn";
+    }
+
+    if (item.insert.status === "success") {
+        return item.insert.mode === "reinsert" ? "Reinsert thành công" : "Auto-insert thành công";
+    }
+
+    return item.insert.mode === "reinsert" ? "Reinsert thất bại" : "Auto-insert thất bại";
+};
+
+const HistoryModal = ({
+    items,
+    status,
+    error,
+    helpers,
+    onClose,
+    onReload,
+    onReinsert,
+    onReloadConfig
+}) => {
+    const [expandedItemId, setExpandedItemId] = useState(null);
+    const [previewItemId, setPreviewItemId] = useState(null);
+    const [actionError, setActionError] = useState("");
+    const [reinsertingItemId, setReinsertingItemId] = useState(null);
+
+    useEffect(() => {
+        if (!expandedItemId) {
+            return;
+        }
+
+        if (!items.some((item) => item.historyId === expandedItemId)) {
+            setExpandedItemId(null);
+        }
+    }, [expandedItemId, items]);
+
+    const previewItem = items.find((item) => item.historyId === previewItemId) || null;
+
+    const handleReinsert = async (item) => {
+        setActionError("");
+        setReinsertingItemId(item.historyId);
+
+        const result = await onReinsert(item);
+
+        if (!result || !result.ok) {
+            setActionError(result && result.error ? result.error : "Không thể chèn lại ảnh từ lịch sử.");
+        }
+
+        setReinsertingItemId(null);
+    };
 
     return (
         <ModalFrame
             title="Lịch sử"
-            subtitle="Danh sách kết quả gần đây. Chọn một item để xem chi tiết trong cùng modal."
+            subtitle="Lịch sử kết quả local cho Tự Do AI, Thay Nền và Phục Chế Ảnh."
             onClose={onClose}
             canClose={true}
         >
-            {selectedItem ? (
-                <div className="modal-stack">
-                    <button className="back-link" onClick={() => setSelectedItem(null)}>
-                        ← Quay lại danh sách
-                    </button>
-                    <div className="history-detail-card">
-                        <div className="history-detail-header">
-                            <span className="pill-tag">{selectedItem.tool}</span>
-                            <span className="history-status">{selectedItem.status}</span>
-                        </div>
-                        <h3>{selectedItem.title}</h3>
-                        <p>{selectedItem.prompt}</p>
-                        <div className="summary-grid">
-                            <div className="summary-tile">
-                                <span className="summary-label">Thời gian</span>
-                                <strong>{selectedItem.time}</strong>
-                            </div>
-                            <div className="summary-tile">
-                                <span className="summary-label">Credit</span>
-                                <strong>{selectedItem.creditCost} ảnh</strong>
-                            </div>
+            <div className="modal-stack">
+                {status === "error" ? (
+                    <div className="form-error">
+                        <div>{error || "Không thể đọc lịch sử local trong plugin."}</div>
+                        <div className="modal-actions" style={{ marginTop: "10px" }}>
+                            <button className="btn" onClick={onReload}>Tải lại</button>
                         </div>
                     </div>
+                ) : null}
+
+                {status === "loading" ? (
+                    <div className="info-banner">Đang tải lịch sử local...</div>
+                ) : null}
+
+                {status !== "loading" && status !== "error" && !items.length ? (
+                    <div className="info-banner">Chưa có lịch sử kết quả nào trên máy này.</div>
+                ) : null}
+
+                {items.map((item) => {
+                    const isExpanded = expandedItemId === item.historyId;
+
+                    return (
+                        <div key={item.historyId} className={`history-entry ${isExpanded ? "is-expanded" : ""}`}>
+                            <button
+                                className="history-row"
+                                onClick={() => {
+                                    setActionError("");
+                                    setExpandedItemId(isExpanded ? null : item.historyId);
+                                }}
+                            >
+                                <div className="history-row-preview">
+                                    {item.previewUrl ? (
+                                        <img src={item.previewUrl} alt={`${item.featureLabel} preview`} />
+                                    ) : (
+                                        <div className="history-row-placeholder">No preview</div>
+                                    )}
+                                </div>
+                                <div className="history-row-copy">
+                                    <strong>{item.featureLabel}</strong>
+                                    <span>{formatHistoryTime(item.createdAt, helpers)}</span>
+                                    <span>{item.summaryLines && item.summaryLines.length ? item.summaryLines[0] : "Không có tóm tắt input."}</span>
+                                </div>
+                                <div className="history-row-side">
+                                    <span className={`history-status ${item.insert && item.insert.status === "success" ? "is-success" : "is-error"}`}>
+                                        {item.insert && item.insert.status === "success" ? "Đã chèn" : "Chèn lỗi"}
+                                    </span>
+                                </div>
+                            </button>
+
+                            {isExpanded ? (
+                                <div className="history-detail-card">
+                                    <div className="history-detail-header">
+                                        <span className="pill-tag">{item.featureLabel}</span>
+                                        <span className={`history-status ${item.insert && item.insert.status === "success" ? "is-success" : "is-error"}`}>
+                                            {getInsertStatusLabel(item)}
+                                        </span>
+                                    </div>
+
+                                    <div className="history-detail-layout">
+                                        <div className="history-preview-panel">
+                                            {item.previewUrl ? (
+                                                <img className="history-preview-image" src={item.previewUrl} alt={`Kết quả ${item.featureLabel}`} />
+                                            ) : (
+                                                <div className="history-preview-missing">Asset preview không còn khả dụng.</div>
+                                            )}
+                                        </div>
+
+                                        <div className="history-detail-copy">
+                                            {item.promptSnapshot ? (
+                                                <>
+                                                    <span className="summary-label">Prompt</span>
+                                                    <p>{item.promptSnapshot}</p>
+                                                </>
+                                            ) : null}
+
+                                            <div className="summary-grid">
+                                                <div className="summary-tile">
+                                                    <span className="summary-label">Thời gian</span>
+                                                    <strong>{formatHistoryTime(item.createdAt, helpers)}</strong>
+                                                    <span>{item.requestId ? `Request ${item.requestId}` : "Không có request id"}</span>
+                                                </div>
+                                                <div className="summary-tile">
+                                                    <span className="summary-label">Trạng thái chèn</span>
+                                                    <strong>{item.insert && item.insert.status === "success" ? "Thành công" : "Thất bại"}</strong>
+                                                    <span>{getInsertStatusLabel(item)}</span>
+                                                </div>
+                                            </div>
+
+                                            {item.summaryLines && item.summaryLines.length ? (
+                                                <div className="history-input-list">
+                                                    {item.summaryLines.map((line) => (
+                                                        <div key={line} className="history-input-line">{line}</div>
+                                                    ))}
+                                                </div>
+                                            ) : null}
+
+                                            {item.insert && item.insert.insertedLayerName ? (
+                                                <div className="history-meta-line">Layer gần nhất: {item.insert.insertedLayerName}</div>
+                                            ) : null}
+
+                                            {item.resultAsset && !item.resultAsset.available ? (
+                                                <div className="form-error">
+                                                    {item.resultAsset.error || "Asset kết quả cục bộ không còn khả dụng."}
+                                                </div>
+                                            ) : null}
+
+                                            {item.insert && item.insert.error ? (
+                                                <div className="form-error">{item.insert.error}</div>
+                                            ) : null}
+
+                                            {actionError ? (
+                                                <div className="form-error">{actionError}</div>
+                                            ) : null}
+
+                                            <div className="modal-actions history-actions">
+                                                <button
+                                                    className="btn"
+                                                    onClick={() => setPreviewItemId(item.historyId)}
+                                                    disabled={!item.previewUrl}
+                                                >
+                                                    Xem ảnh lớn
+                                                </button>
+                                                <button
+                                                    className="btn primary"
+                                                    onClick={() => handleReinsert(item)}
+                                                    disabled={!item.canReinsert || reinsertingItemId === item.historyId}
+                                                >
+                                                    {reinsertingItemId === item.historyId ? "Đang chèn..." : "Reinsert"}
+                                                </button>
+                                                <button
+                                                    className="btn"
+                                                    onClick={() => onReloadConfig(item)}
+                                                    disabled={!item.canReload}
+                                                >
+                                                    Nạp lại cấu hình
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {previewItem && previewItem.previewUrl ? (
+                <div className="history-preview-overlay" onClick={() => setPreviewItemId(null)}>
+                    <div className="history-preview-dialog" onClick={(event) => event.stopPropagation()}>
+                        <div className="history-detail-header">
+                            <span className="pill-tag">{previewItem.featureLabel}</span>
+                            <button className="btn icon-only modal-close" onClick={() => setPreviewItemId(null)} title="Đóng preview">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <img className="history-preview-dialog-image" src={previewItem.previewUrl} alt={`Preview lớn ${previewItem.featureLabel}`} />
+                    </div>
                 </div>
-            ) : (
-                <div className="modal-stack">
-                    {items.map((item) => (
-                        <button
-                            key={item.id}
-                            className="history-row"
-                            onClick={() => setSelectedItem(item)}
-                        >
-                            <div className="history-row-copy">
-                                <strong>{item.title}</strong>
-                                <span>{item.tool} · {item.time}</span>
-                            </div>
-                            <span className="history-status">{item.status}</span>
-                        </button>
-                    ))}
-                </div>
-            )}
+            ) : null}
         </ModalFrame>
     );
 };
@@ -1156,6 +1334,9 @@ export const ShellModalHost = ({
     authActions,
     helpers,
     onClose,
+    onReloadHistory,
+    onHistoryReinsert,
+    onHistoryReload,
     onOpenPurchase,
     onOpenCreditSubscription,
     onOpenSupport,
@@ -1178,7 +1359,18 @@ export const ShellModalHost = ({
     }
 
     if (activeModal === "history") {
-        return <HistoryModal items={summaries.historyItems} onClose={onClose} />;
+        return (
+            <HistoryModal
+                items={summaries.historyItems}
+                status={summaries.historyStatus}
+                error={summaries.historyError}
+                helpers={helpers}
+                onClose={onClose}
+                onReload={onReloadHistory}
+                onReinsert={onHistoryReinsert}
+                onReloadConfig={onHistoryReload}
+            />
+        );
     }
 
     if (activeModal === "account") {

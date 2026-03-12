@@ -35,11 +35,13 @@ const mapSourceTypeToApiSource = (sourceType) => {
     return 'file';
 };
 
-export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
+export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecordHistory, historyRestoreRequest }) => {
     const rootRef = useRef(null);
+    const handledRestoreIdRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [insertError, setInsertError] = useState('');
+    const [historyNotice, setHistoryNotice] = useState('');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [size, setSize] = useState('4K');
     const [backgroundPreset, setBackgroundPreset] = useState('studio');
@@ -60,7 +62,8 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
         addFromQuickLayer,
         removeImage,
         selectActiveImage,
-        touchAllImages
+        touchAllImages,
+        restoreFromSnapshots
     } = useReferenceImages({
         toolKey: TOOL_KEY,
         maxItems: MAX_REFERENCE_IMAGES
@@ -104,6 +107,52 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
         };
     }, [actionsDisabled, addFromClipboard, canAddMore]);
 
+    useEffect(() => {
+        if (!historyRestoreRequest || !historyRestoreRequest.id || handledRestoreIdRef.current === historyRestoreRequest.id) {
+            return;
+        }
+
+        if (!historyRestoreRequest.payload || historyRestoreRequest.payload.tabId !== TOOL_KEY) {
+            return;
+        }
+
+        handledRestoreIdRef.current = historyRestoreRequest.id;
+        let cancelled = false;
+
+        const applyHistoryRestore = async () => {
+            const payload = historyRestoreRequest.payload;
+
+            setIsLoading(false);
+            setErrorMessage('');
+            setInsertError('');
+            setResult(null);
+            setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
+            setAspectRatio(payload.aspectRatio || '3:4');
+            setSize(payload.size || '4K');
+            setBackgroundPreset(payload.backgroundPreset || 'studio');
+            setPrompt(payload.prompt || '');
+            setKeepSubject(typeof payload.keepSubject === 'boolean' ? payload.keepSubject : true);
+            setMatchLighting(typeof payload.matchLighting === 'boolean' ? payload.matchLighting : true);
+            setReplacementStrength(payload.replacementStrength || 'medium');
+            setShowQuickLayerOptions(false);
+
+            const restored = await restoreFromSnapshots({
+                snapshots: payload.referenceImages || [],
+                nextActiveImageId: payload.activeImageId || null
+            });
+
+            if (!cancelled && payload.referenceImages && payload.referenceImages.length > 0 && !restored.items.length) {
+                setErrorMessage('Không thể khôi phục ảnh đầu vào từ history item này.');
+            }
+        };
+
+        applyHistoryRestore();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [historyRestoreRequest, restoreFromSnapshots]);
+
     const createGeneratePayload = () => {
         if (!activeImage) {
             throw new Error('Cần ít nhất 1 ảnh đầu vào để chạy Thay Nền.');
@@ -138,6 +187,7 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
 
         setErrorMessage('');
         setInsertError('');
+        setHistoryNotice('');
         setIsLoading(true);
 
         try {
@@ -206,7 +256,7 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
                 }
             }
 
-            setResult({
+            const nextResult = {
                 imageBase64: response.data.imageBase64,
                 mimeType: resultMimeType,
                 previewUrl,
@@ -214,7 +264,70 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
                 generatedAt: Date.now(),
                 inputSummary: response.data.inputSummary || null,
                 insert: insertState
-            });
+            };
+
+            setResult(nextResult);
+
+            if (onRecordHistory) {
+                await onRecordHistory({
+                    featureKey: TOOL_KEY,
+                    featureLabel: 'Thay Nền',
+                    layerNamePrefix: 'Thay Nen',
+                    requestId: response.data.requestId,
+                    createdAt: nextResult.generatedAt,
+                    promptSnapshot: payload.prompt,
+                    settingsSnapshot: {
+                        aspectRatio: payload.ratio,
+                        size: payload.size,
+                        preset: payload.preset,
+                        keepSubject: payload.keepSubject,
+                        matchLighting: payload.matchLighting,
+                        replacementStrength: payload.replacementStrength
+                    },
+                    summaryLines: [
+                        `Preset: ${BACKGROUND_PRESETS.find((preset) => preset.id === payload.preset)?.label || payload.preset}`,
+                        `Tỉ lệ: ${payload.ratio}`,
+                        `Kích thước: ${payload.size}`,
+                        `Giữ chủ thể: ${payload.keepSubject ? 'Bật' : 'Tắt'}`,
+                        `Khớp ánh sáng: ${payload.matchLighting ? 'Bật' : 'Tắt'}`,
+                        `Độ mạnh thay nền: ${REPLACEMENT_STRENGTH_OPTIONS.find((option) => option.id === payload.replacementStrength)?.label || payload.replacementStrength}`
+                    ],
+                    errorSummary: insertState.error || '',
+                    insert: {
+                        ...insertState,
+                        mode: 'auto',
+                        updatedAt: Date.now()
+                    },
+                    resultImage: {
+                        imageBase64: response.data.imageBase64,
+                        mimeType: resultMimeType,
+                        displayName: `thay-nen-${response.data.requestId || Date.now()}`
+                    },
+                    rehydrationPayload: {
+                        tabId: TOOL_KEY,
+                        aspectRatio: payload.ratio,
+                        size: payload.size,
+                        backgroundPreset: payload.preset,
+                        prompt: payload.prompt,
+                        keepSubject: payload.keepSubject,
+                        matchLighting: payload.matchLighting,
+                        replacementStrength: payload.replacementStrength,
+                        activeImageId,
+                        referenceImages: items.map((image) => ({
+                            id: image.id,
+                            sourceType: image.sourceType,
+                            displayName: image.displayName,
+                            mimeType: image.mimeType,
+                            storagePath: image.storagePath,
+                            width: image.width,
+                            height: image.height,
+                            createdAt: image.createdAt,
+                            lastUsedAt: image.lastUsedAt,
+                            persistentToken: image.persistentToken
+                        }))
+                    }
+                });
+            }
         } catch (error) {
             setErrorMessage(error && error.message ? error.message : 'Không thể chuẩn bị request Thay Nền.');
         } finally {
@@ -440,6 +553,12 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
             {errorMessage ? (
                 <div className="section">
                     <div className="status-banner status-banner-error">{errorMessage}</div>
+                </div>
+            ) : null}
+
+            {historyNotice ? (
+                <div className="section">
+                    <div className="success-banner">{historyNotice}</div>
                 </div>
             ) : null}
 

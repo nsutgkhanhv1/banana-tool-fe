@@ -18,11 +18,13 @@ const mapSourceTypeToApiSource = (sourceType) => {
     return 'file';
 };
 
-export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
+export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecordHistory, historyRestoreRequest }) => {
     const rootRef = useRef(null);
+    const handledRestoreIdRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [insertError, setInsertError] = useState('');
+    const [historyNotice, setHistoryNotice] = useState('');
     const [aspectRatio, setAspectRatio] = useState('2:3');
     const [size, setSize] = useState('4K');
     const [prompt, setPrompt] = useState('');
@@ -42,7 +44,8 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
         addFromQuickLayer,
         removeImage,
         selectActiveImage,
-        touchAllImages
+        touchAllImages,
+        restoreFromSnapshots
     } = useReferenceImages({
         toolKey: TOOL_KEY,
         maxItems: MAX_REFERENCE_IMAGES
@@ -85,6 +88,50 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
         };
     }, [actionsDisabled, addFromClipboard, canAddMore]);
 
+    useEffect(() => {
+        if (!historyRestoreRequest || !historyRestoreRequest.id || handledRestoreIdRef.current === historyRestoreRequest.id) {
+            return;
+        }
+
+        if (!historyRestoreRequest.payload || historyRestoreRequest.payload.tabId !== TOOL_KEY) {
+            return;
+        }
+
+        handledRestoreIdRef.current = historyRestoreRequest.id;
+        let cancelled = false;
+
+        const applyHistoryRestore = async () => {
+            const payload = historyRestoreRequest.payload;
+
+            setIsLoading(false);
+            setErrorMessage('');
+            setInsertError('');
+            setResult(null);
+            setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
+            setAspectRatio(payload.aspectRatio || '2:3');
+            setSize(payload.size || '4K');
+            setPrompt(payload.prompt || '');
+            setAutoZoom(typeof payload.autoZoom === 'boolean' ? payload.autoZoom : true);
+            setCreativity(payload.creativity || 'balanced');
+            setShowQuickLayerOptions(false);
+
+            const restored = await restoreFromSnapshots({
+                snapshots: payload.referenceImages || [],
+                nextActiveImageId: payload.activeImageId || null
+            });
+
+            if (!cancelled && payload.referenceImages && payload.referenceImages.length > 0 && !restored.items.length) {
+                setErrorMessage('Không thể khôi phục ảnh tham chiếu từ history item này.');
+            }
+        };
+
+        applyHistoryRestore();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [historyRestoreRequest, restoreFromSnapshots]);
+
     const createGeneratePayload = () => {
         const trimmedPrompt = prompt.trim();
 
@@ -124,6 +171,7 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
 
         setErrorMessage('');
         setInsertError('');
+        setHistoryNotice('');
         setIsLoading(true);
 
         try {
@@ -192,7 +240,7 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
                 }
             }
 
-            setResult({
+            const nextResult = {
                 imageBase64: response.data.imageBase64,
                 mimeType: resultMimeType,
                 previewUrl,
@@ -200,7 +248,68 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
                 generatedAt: Date.now(),
                 inputSummary: response.data.inputSummary || null,
                 insert: insertState
-            });
+            };
+
+            setResult(nextResult);
+
+            if (onRecordHistory) {
+                await onRecordHistory({
+                    featureKey: TOOL_KEY,
+                    featureLabel: 'Tự Do AI',
+                    layerNamePrefix: 'Tu Do AI',
+                    requestId: response.data.requestId,
+                    createdAt: nextResult.generatedAt,
+                    promptSnapshot: payload.prompt,
+                    settingsSnapshot: {
+                        aspectRatio: payload.ratio,
+                        size: payload.size,
+                        autoZoom: payload.autoZoom,
+                        creativity: payload.creativity,
+                        referenceImageCount: items.length,
+                        activeImageIndex
+                    },
+                    summaryLines: [
+                        `Prompt: ${payload.prompt ? `${payload.prompt.slice(0, 80)}${payload.prompt.length > 80 ? '...' : ''}` : 'Không dùng prompt.'}`,
+                        `Ảnh tham chiếu: ${items.length}`,
+                        `Tỉ lệ: ${payload.ratio}`,
+                        `Kích thước: ${payload.size}`,
+                        `Mức bám input: ${payload.creativity === 'creative' ? 'Sáng tạo' : payload.creativity === 'faithful' ? 'Bám sát' : 'Cân bằng'}`,
+                        `Tự động thu phóng: ${payload.autoZoom ? 'Bật' : 'Tắt'}`
+                    ],
+                    errorSummary: insertState.error || '',
+                    insert: {
+                        ...insertState,
+                        mode: 'auto',
+                        updatedAt: Date.now()
+                    },
+                    resultImage: {
+                        imageBase64: response.data.imageBase64,
+                        mimeType: resultMimeType,
+                        displayName: `tu-do-ai-${response.data.requestId || Date.now()}`
+                    },
+                    rehydrationPayload: {
+                        tabId: TOOL_KEY,
+                        prompt: payload.prompt,
+                        aspectRatio: payload.ratio,
+                        size: payload.size,
+                        autoZoom: payload.autoZoom,
+                        creativity: payload.creativity,
+                        activeImageId,
+                        referenceImages: items.map((image) => ({
+                            id: image.id,
+                            sourceType: image.sourceType,
+                            displayName: image.displayName,
+                            mimeType: image.mimeType,
+                            storagePath: image.storagePath,
+                            width: image.width,
+                            height: image.height,
+                            createdAt: image.createdAt,
+                            lastUsedAt: image.lastUsedAt,
+                            persistentToken: image.persistentToken
+                        }))
+                    }
+                });
+            }
         } catch (error) {
             setErrorMessage(error && error.message ? error.message : 'Không thể chuẩn bị request Tự Do AI.');
         } finally {
@@ -404,6 +513,12 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
             {errorMessage ? (
                 <div className="section">
                     <div className="status-banner status-banner-error">{errorMessage}</div>
+                </div>
+            ) : null}
+
+            {historyNotice ? (
+                <div className="section">
+                    <div className="success-banner">{historyNotice}</div>
                 </div>
             ) : null}
 

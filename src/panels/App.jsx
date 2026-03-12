@@ -5,6 +5,8 @@ import { ShellModalHost } from "../components/ShellModalHost.jsx";
 import { ShellSettingsView } from "../components/ShellSettingsView.jsx";
 import { requestJson } from "../lib/api.js";
 import { formatEntitlementDate, getEntitlementUiState, getGenerateDenyMessage } from "../lib/entitlement.js";
+import { capturePhotoshopContext, insertGeneratedImage } from "../lib/photoshop.js";
+import { appendHistoryItem, loadHistoryItems, updateHistoryItemInsertState } from "../lib/result-history.js";
 import { ThayNenTab } from "./tabs/ThayNenTab.jsx";
 import { PhucCheTab } from "./tabs/PhucCheTab.jsx";
 import { TuDoAITab } from "./tabs/TuDoAITab.jsx";
@@ -17,36 +19,6 @@ const TABS = [
     { id: "thaynen", label: "Thay Nền", component: ThayNenTab },
     { id: "phucche", label: "Phục chế ảnh", component: PhucCheTab },
     { id: "tudoai", label: "Tự do AI", component: TuDoAITab }
-];
-
-const HISTORY_ITEMS = [
-    {
-        id: "hist-01",
-        tool: "Thay Nền",
-        title: "Portrait studio nền be",
-        time: "10:42",
-        creditCost: 1,
-        prompt: "Nền studio be, ánh sáng mềm, giữ nguyên chủ thể.",
-        status: "Hoàn tất"
-    },
-    {
-        id: "hist-02",
-        tool: "Phục chế ảnh",
-        title: "Ảnh gia đình 1986",
-        time: "Hôm qua",
-        creditCost: 2,
-        prompt: "Khôi phục khuôn mặt, giảm hạt và giữ tone ảnh gốc.",
-        status: "Hoàn tất"
-    },
-    {
-        id: "hist-03",
-        tool: "Tự Do AI",
-        title: "Lookbook ngoài trời",
-        time: "Thứ Hai",
-        creditCost: 3,
-        prompt: "Tạo lookbook ngoài trời, tông nắng chiều, bố cục editorial.",
-        status: "Đã lưu"
-    }
 ];
 
 const PURCHASE_OPTIONS = [
@@ -174,12 +146,24 @@ export const App = () => {
     const [refreshStatus, setRefreshStatus] = useState("idle");
     const [toast, setToast] = useState(null);
     const [tabRefreshVersion, setTabRefreshVersion] = useState(0);
+    const [historyItems, setHistoryItems] = useState([]);
+    const [historyStatus, setHistoryStatus] = useState("idle");
+    const [historyError, setHistoryError] = useState("");
+    const [historyRestoreRequest, setHistoryRestoreRequest] = useState(null);
     const [authModalConfig, setAuthModalConfig] = useState({
         resetKey: 0,
         initialView: "login",
         email: "",
         notice: ""
     });
+
+    const historyNamespace = useMemo(() => {
+        if (!userProfile) {
+            return null;
+        }
+
+        return userProfile.id || userProfile.email || "authenticated-user";
+    }, [userProfile]);
 
     const showToast = useCallback((message, tone) => {
         setToast({
@@ -329,6 +313,39 @@ export const App = () => {
         persistTab(activeTab);
     }, [activeTab]);
 
+    const refreshHistory = useCallback(async () => {
+        if (!historyNamespace) {
+            setHistoryItems([]);
+            setHistoryStatus("ready");
+            setHistoryError("");
+            return;
+        }
+
+        setHistoryStatus("loading");
+        setHistoryError("");
+
+        try {
+            const items = await loadHistoryItems(historyNamespace);
+            setHistoryItems(items);
+            setHistoryStatus("ready");
+        } catch (error) {
+            setHistoryItems([]);
+            setHistoryStatus("error");
+            setHistoryError(error && error.message ? error.message : "Không thể đọc lịch sử local trong plugin.");
+        }
+    }, [historyNamespace]);
+
+    useEffect(() => {
+        if (authStatus !== "authenticated") {
+            setHistoryItems([]);
+            setHistoryStatus("idle");
+            setHistoryError("");
+            return;
+        }
+
+        refreshHistory();
+    }, [authStatus, refreshHistory]);
+
     const refreshShell = useCallback(async () => {
         if (!session) {
             openAuthModal("login");
@@ -406,6 +423,127 @@ export const App = () => {
 
         setActiveTab(nextTab);
     }, [authStatus, handleBlockedInteraction]);
+
+    const handleRecordHistory = useCallback(async (draft) => {
+        if (!historyNamespace) {
+            return;
+        }
+
+        try {
+            const items = await appendHistoryItem({
+                namespace: historyNamespace,
+                draft
+            });
+            setHistoryItems(items);
+            setHistoryStatus("ready");
+            setHistoryError("");
+        } catch (error) {
+            showToast("Đã tạo ảnh nhưng chưa thể ghi lịch sử local.", "warning");
+        }
+    }, [historyNamespace, showToast]);
+
+    const handleHistoryReinsert = useCallback(async (item) => {
+        if (!historyNamespace) {
+            return {
+                ok: false,
+                error: "Không tìm thấy namespace history hiện tại."
+            };
+        }
+
+        if (!item || !item.canReinsert || !item.previewUrl) {
+            return {
+                ok: false,
+                error: "Asset kết quả cục bộ không còn khả dụng để chèn lại."
+            };
+        }
+
+        try {
+            const insertContext = await capturePhotoshopContext();
+            const insertResult = await insertGeneratedImage({
+                imageBase64: item.previewUrl,
+                mimeType: item.resultAsset && item.resultAsset.mimeType ? item.resultAsset.mimeType : "image/png",
+                context: insertContext,
+                layerNamePrefix: item.layerNamePrefix
+            });
+
+            const nextInsertState = {
+                status: "success",
+                insertedLayerId: insertResult.insertedLayerId,
+                insertedLayerName: insertResult.insertedLayerName,
+                error: "",
+                mode: "reinsert",
+                updatedAt: Date.now()
+            };
+            const items = await updateHistoryItemInsertState({
+                namespace: historyNamespace,
+                historyId: item.historyId,
+                insert: nextInsertState
+            });
+
+            setHistoryItems(items);
+            setHistoryStatus("ready");
+            setHistoryError("");
+            showToast("Đã chèn lại ảnh từ lịch sử vào Photoshop.", "success");
+
+            return {
+                ok: true
+            };
+        } catch (error) {
+            const nextInsertState = {
+                status: "failed",
+                insertedLayerId: null,
+                insertedLayerName: "",
+                error: error && error.message ? error.message : "Không thể chèn lại ảnh từ lịch sử.",
+                mode: "reinsert",
+                updatedAt: Date.now()
+            };
+
+            try {
+                const items = await updateHistoryItemInsertState({
+                    namespace: historyNamespace,
+                    historyId: item.historyId,
+                    insert: nextInsertState
+                });
+                setHistoryItems(items);
+                setHistoryStatus("ready");
+            } catch (updateError) {
+                // Keep original history item even if local insert status cannot be updated.
+            }
+
+            showToast(nextInsertState.error, "error");
+
+            return {
+                ok: false,
+                error: nextInsertState.error
+            };
+        }
+    }, [historyNamespace, showToast]);
+
+    const handleHistoryReload = useCallback((item) => {
+        if (!item || !item.canReload || !item.rehydrationPayload) {
+            showToast("History item này chưa đủ dữ liệu để nạp lại cấu hình.", "warning");
+            return;
+        }
+
+        const confirmed = typeof window === "undefined" || typeof window.confirm !== "function"
+            ? true
+            : window.confirm("Nạp lại cấu hình từ lịch sử sẽ ghi đè form hiện tại của tab đích. Tiếp tục?");
+
+        if (!confirmed) {
+            return;
+        }
+
+        setActiveAuxScreen(null);
+        setActiveModal(null);
+        setActiveTab(item.rehydrationPayload.tabId);
+        setHistoryRestoreRequest({
+            id: Date.now(),
+            historyId: item.historyId,
+            featureLabel: item.featureLabel,
+            payload: item.rehydrationPayload
+        });
+        showToast(`Đã nạp cấu hình ${item.featureLabel} từ lịch sử.`, "success");
+    }, [showToast]);
 
     const performLogout = useCallback(async () => {
         if (session) {
@@ -808,8 +946,10 @@ export const App = () => {
     const tabProps = useMemo(() => ({
         actionsDisabled: shellLocked,
         onRequireAuth: handleBlockedInteraction,
-        onGenerate: submitGenerate
-    }), [handleBlockedInteraction, shellLocked, submitGenerate]);
+        onGenerate: submitGenerate,
+        onRecordHistory: handleRecordHistory,
+        historyRestoreRequest
+    }), [handleBlockedInteraction, handleRecordHistory, historyRestoreRequest, shellLocked, submitGenerate]);
 
     const tabsMarkup = useMemo(() => (
         TABS.map((tab) => {
@@ -824,6 +964,8 @@ export const App = () => {
                         refreshVersion={tabRefreshVersion}
                         actionsDisabled={tabProps.actionsDisabled}
                         onRequireAuth={tabProps.onRequireAuth}
+                        onRecordHistory={tabProps.onRecordHistory}
+                        historyRestoreRequest={tabProps.historyRestoreRequest}
                         onGenerate={
                             tab.id === "tudoai"
                                 ? submitTuDoAIGenerate
@@ -925,11 +1067,16 @@ export const App = () => {
                     entitlement,
                     entitlementUi,
                     entitlementSyncError,
-                    historyItems: HISTORY_ITEMS,
+                    historyItems,
+                    historyStatus,
+                    historyError,
                     purchaseOptions: PURCHASE_OPTIONS
                 }}
                 userProfile={userProfile}
                 onClose={closeModal}
+                onReloadHistory={refreshHistory}
+                onHistoryReinsert={handleHistoryReinsert}
+                onHistoryReload={handleHistoryReload}
                 onOpenPurchase={() => setActiveModal("purchase")}
                 onOpenCreditSubscription={openCreditSubscription}
                 onOpenSupport={openSupportModal}

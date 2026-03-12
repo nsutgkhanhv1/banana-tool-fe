@@ -2,6 +2,7 @@ const DEFAULT_RESULT_MIME_TYPE = "image/png";
 const SUPPORTED_REFERENCE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const REFERENCE_ASSET_MIME_TYPE = "image/png";
 const REFERENCE_ASSET_FOLDER = "reference-images";
+const HISTORY_ASSET_FOLDER = "result-history";
 
 const createError = (message, code) => {
     const error = new Error(message);
@@ -132,6 +133,7 @@ const getFileExtensionFromMimeType = (mimeType) => {
 const buildUniqueAssetSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const buildReferenceAssetName = (prefix) => `${prefix}-${buildUniqueAssetSuffix()}.${getFileExtensionFromMimeType(REFERENCE_ASSET_MIME_TYPE)}`;
+const buildManagedImageAssetName = (prefix, mimeType) => `${prefix}-${buildUniqueAssetSuffix()}.${getFileExtensionFromMimeType(mimeType)}`;
 
 const getQuickLayerDisplayName = (mode) => {
     if (mode === "visible_canvas") {
@@ -232,6 +234,14 @@ export const createManagedReferenceAssetEntry = async (fileName) => {
     return assetsFolder.createFile(fileName, { overwrite: true });
 };
 
+const createManagedImageAssetEntry = async ({ folderName, fileName }) => {
+    const storage = getUxpStorage();
+    const dataFolder = await storage.localFileSystem.getDataFolder();
+    const assetsFolder = await ensureFolder(dataFolder, folderName);
+
+    return assetsFolder.createFile(fileName, { overwrite: true });
+};
+
 const blobToUint8Array = async (blob) => {
     if (blob && typeof blob.arrayBuffer === "function") {
         return new Uint8Array(await blob.arrayBuffer());
@@ -308,6 +318,37 @@ export const importReferenceFromClipboard = async () => {
     }
 
     throw createError("Clipboard hiện không có dữ liệu ảnh hợp lệ.", "CLIPBOARD_NO_IMAGE");
+};
+
+export const writeManagedImageAsset = async ({
+    imageBase64,
+    mimeType,
+    displayName,
+    folderName = HISTORY_ASSET_FOLDER,
+    fileNamePrefix = "history-result"
+}) => {
+    const storage = getUxpStorage();
+    const normalizedMimeType = normalizeResultMimeType(getMimeTypeFromDataUrl(imageBase64, mimeType || DEFAULT_RESULT_MIME_TYPE));
+    const fileName = buildManagedImageAssetName(fileNamePrefix, normalizedMimeType);
+    const outputEntry = await createManagedImageAssetEntry({
+        folderName,
+        fileName
+    });
+
+    await outputEntry.write(base64ToUint8Array(getBase64Payload(imageBase64)), {
+        format: storage.formats.binary
+    });
+
+    const imageAsset = await readReferenceImageFromEntry(outputEntry, {
+        displayName: displayName || fileName,
+        mimeType: normalizedMimeType,
+        storagePath: outputEntry.nativePath || fileName
+    });
+
+    return {
+        ...imageAsset,
+        persistentToken: await createPersistentTokenForEntry(outputEntry)
+    };
 };
 
 export const importReferenceFromQuickLayer = async ({ mode }) => {

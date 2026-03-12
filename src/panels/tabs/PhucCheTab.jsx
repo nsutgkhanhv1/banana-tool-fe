@@ -89,12 +89,14 @@ const mapSourceTypeToApiSource = (sourceType) => {
     return 'file';
 };
 
-export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
+export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecordHistory, historyRestoreRequest }) => {
     const defaultPresetProfile = PRESET_PROFILES.comprehensive_restore;
     const rootRef = useRef(null);
+    const handledRestoreIdRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [insertError, setInsertError] = useState('');
+    const [historyNotice, setHistoryNotice] = useState('');
     const [size, setSize] = useState('4K');
     const [preset, setPreset] = useState('comprehensive_restore');
     const [mode, setMode] = useState(defaultPresetProfile.mode);
@@ -120,7 +122,8 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
         addFromQuickLayer,
         removeImage,
         selectActiveImage,
-        touchAllImages
+        touchAllImages,
+        restoreFromSnapshots
     } = useReferenceImages({
         toolKey: TOOL_KEY,
         maxItems: MAX_SOURCE_IMAGES
@@ -169,6 +172,57 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
         };
     }, [actionsDisabled, addFromClipboard, canAddMore]);
 
+    useEffect(() => {
+        if (!historyRestoreRequest || !historyRestoreRequest.id || handledRestoreIdRef.current === historyRestoreRequest.id) {
+            return;
+        }
+
+        if (!historyRestoreRequest.payload || historyRestoreRequest.payload.tabId !== TOOL_KEY) {
+            return;
+        }
+
+        handledRestoreIdRef.current = historyRestoreRequest.id;
+        let cancelled = false;
+
+        const applyHistoryRestore = async () => {
+            const payload = historyRestoreRequest.payload;
+
+            setIsLoading(false);
+            setErrorMessage('');
+            setInsertError('');
+            setResult(null);
+            setCompareView('after');
+            setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
+            setSize(payload.size || '4K');
+            setPreset(payload.preset || 'comprehensive_restore');
+            setMode(payload.mode || defaultPresetProfile.mode);
+            setEnhanceFace(typeof payload.enhanceFace === 'boolean' ? payload.enhanceFace : defaultPresetProfile.enhanceFace);
+            setDenoise(typeof payload.denoise === 'boolean' ? payload.denoise : defaultPresetProfile.denoise);
+            setColorize(typeof payload.colorize === 'boolean' ? payload.colorize : defaultPresetProfile.colorize);
+            setFidelityMode(payload.fidelityMode || defaultPresetProfile.fidelityMode);
+            setRestorationIntensity(payload.restorationIntensity || defaultPresetProfile.restorationIntensity);
+            setColorTone(payload.colorTone || defaultPresetProfile.colorTone);
+            setPrompt(payload.prompt || '');
+            setShowAdvancedPrompt(Boolean(payload.prompt));
+            setShowQuickLayerOptions(false);
+
+            const restored = await restoreFromSnapshots({
+                snapshots: payload.referenceImages || [],
+                nextActiveImageId: payload.activeImageId || null
+            });
+
+            if (!cancelled && payload.referenceImages && payload.referenceImages.length > 0 && !restored.items.length) {
+                setErrorMessage('Không thể khôi phục ảnh đầu vào từ history item này.');
+            }
+        };
+
+        applyHistoryRestore();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [defaultPresetProfile.colorTone, defaultPresetProfile.denoise, defaultPresetProfile.enhanceFace, defaultPresetProfile.fidelityMode, defaultPresetProfile.mode, defaultPresetProfile.restorationIntensity, historyRestoreRequest, restoreFromSnapshots]);
+
     const createGeneratePayload = () => {
         if (!activeImage) {
             throw new Error('Cần ít nhất 1 ảnh đầu vào để chạy Phục Chế Ảnh.');
@@ -206,6 +260,7 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
 
         setErrorMessage('');
         setInsertError('');
+        setHistoryNotice('');
         setIsLoading(true);
 
         try {
@@ -277,7 +332,7 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
             }
 
             setCompareView('after');
-            setResult({
+            const nextResult = {
                 imageBase64: response.data.imageBase64,
                 mimeType: resultMimeType,
                 previewUrl,
@@ -287,7 +342,76 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
                 generatedAt: Date.now(),
                 inputSummary: response.data.inputSummary || null,
                 insert: insertState
-            });
+            };
+
+            setResult(nextResult);
+
+            if (onRecordHistory) {
+                await onRecordHistory({
+                    featureKey: TOOL_KEY,
+                    featureLabel: 'Phục Chế Ảnh',
+                    layerNamePrefix: 'Phuc Che',
+                    requestId: response.data.requestId,
+                    createdAt: nextResult.generatedAt,
+                    promptSnapshot: payload.prompt,
+                    settingsSnapshot: {
+                        size: payload.size,
+                        preset: payload.preset,
+                        mode: payload.mode,
+                        enhanceFace: payload.enhanceFace,
+                        denoise: payload.denoise,
+                        colorize: payload.colorize,
+                        fidelityMode: payload.fidelityMode,
+                        restorationIntensity: payload.restorationIntensity,
+                        colorTone: payload.colorTone || null
+                    },
+                    summaryLines: [
+                        `Preset: ${RESTORE_PRESETS.find((option) => option.id === payload.preset)?.label || payload.preset}`,
+                        `Mode: ${RESTORE_MODES.find((option) => option.id === payload.mode)?.label || payload.mode}`,
+                        `Kích thước: ${payload.size}`,
+                        `Khôi phục mặt: ${payload.enhanceFace ? 'Bật' : 'Tắt'}`,
+                        `Khử nhiễu: ${payload.denoise ? 'Bật' : 'Tắt'}`,
+                        `Tô màu: ${payload.colorize ? `Bật${payload.colorTone ? ` (${COLOR_TONE_OPTIONS.find((option) => option.id === payload.colorTone)?.label || payload.colorTone})` : ''}` : 'Tắt'}`
+                    ],
+                    errorSummary: insertState.error || '',
+                    insert: {
+                        ...insertState,
+                        mode: 'auto',
+                        updatedAt: Date.now()
+                    },
+                    resultImage: {
+                        imageBase64: response.data.imageBase64,
+                        mimeType: resultMimeType,
+                        displayName: `phuc-che-${response.data.requestId || Date.now()}`
+                    },
+                    rehydrationPayload: {
+                        tabId: TOOL_KEY,
+                        size: payload.size,
+                        preset: payload.preset,
+                        mode: payload.mode,
+                        prompt: payload.prompt,
+                        enhanceFace: payload.enhanceFace,
+                        denoise: payload.denoise,
+                        colorize: payload.colorize,
+                        fidelityMode: payload.fidelityMode,
+                        restorationIntensity: payload.restorationIntensity,
+                        colorTone: payload.colorTone || '',
+                        activeImageId,
+                        referenceImages: items.map((image) => ({
+                            id: image.id,
+                            sourceType: image.sourceType,
+                            displayName: image.displayName,
+                            mimeType: image.mimeType,
+                            storagePath: image.storagePath,
+                            width: image.width,
+                            height: image.height,
+                            createdAt: image.createdAt,
+                            lastUsedAt: image.lastUsedAt,
+                            persistentToken: image.persistentToken
+                        }))
+                    }
+                });
+            }
         } catch (error) {
             setErrorMessage(error && error.message ? error.message : 'Không thể chuẩn bị request Phục Chế Ảnh.');
         } finally {
@@ -562,6 +686,12 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
             {errorMessage ? (
                 <div className="section">
                     <div className="status-banner status-banner-error">{errorMessage}</div>
+                </div>
+            ) : null}
+
+            {historyNotice ? (
+                <div className="section">
+                    <div className="success-banner">{historyNotice}</div>
                 </div>
             ) : null}
 
