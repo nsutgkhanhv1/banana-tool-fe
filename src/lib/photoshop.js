@@ -1,5 +1,7 @@
 const DEFAULT_RESULT_MIME_TYPE = "image/png";
 const SUPPORTED_REFERENCE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const REFERENCE_ASSET_MIME_TYPE = "image/png";
+const REFERENCE_ASSET_FOLDER = "reference-images";
 
 const createError = (message, code) => {
     const error = new Error(message);
@@ -21,6 +23,17 @@ export const getUxpStorage = () => {
     } catch (error) {
         throw createError("Không thể truy cập storage của UXP.", "UXP_STORAGE_UNAVAILABLE");
     }
+};
+
+const ensureFolder = async (parentFolder, folderName) => {
+    const entries = await parentFolder.getEntries();
+    const existingFolder = entries.find((entry) => entry && entry.isFolder && entry.name === folderName);
+
+    if (existingFolder) {
+        return existingFolder;
+    }
+
+    return parentFolder.createFolder(folderName);
 };
 
 const normalizeDimension = (value) => {
@@ -92,6 +105,42 @@ const getMimeTypeFromDataUrl = (value, fallbackMimeType) => {
     return mimeType || fallbackMimeType;
 };
 
+const normalizeResultMimeType = (mimeType) => {
+    if (!mimeType) {
+        return DEFAULT_RESULT_MIME_TYPE;
+    }
+
+    if (SUPPORTED_REFERENCE_MIME_TYPES.includes(mimeType)) {
+        return mimeType;
+    }
+
+    return DEFAULT_RESULT_MIME_TYPE;
+};
+
+const getFileExtensionFromMimeType = (mimeType) => {
+    if (mimeType === "image/png") {
+        return "png";
+    }
+
+    if (mimeType === "image/webp") {
+        return "webp";
+    }
+
+    return "jpg";
+};
+
+const buildUniqueAssetSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const buildReferenceAssetName = (prefix) => `${prefix}-${buildUniqueAssetSuffix()}.${getFileExtensionFromMimeType(REFERENCE_ASSET_MIME_TYPE)}`;
+
+const getQuickLayerDisplayName = (mode) => {
+    if (mode === "visible_canvas") {
+        return `Visible Canvas ${buildTimestamp()}`;
+    }
+
+    return `Current Layer ${buildTimestamp()}`;
+};
+
 const getBase64Payload = (value) => (value.startsWith("data:") ? value.split(",").pop() || "" : value);
 
 const buildTimestamp = () => {
@@ -110,7 +159,7 @@ export const buildImagePreviewUrl = (imageBase64, mimeType = DEFAULT_RESULT_MIME
         return imageBase64;
     }
 
-    return `data:${mimeType};base64,${imageBase64}`;
+    return `data:${normalizeResultMimeType(mimeType)};base64,${imageBase64}`;
 };
 
 const guessMimeTypeFromName = (name) => {
@@ -175,6 +224,31 @@ export const readReferenceImageFromEntry = async (entry, overrides = {}) => {
     };
 };
 
+export const createManagedReferenceAssetEntry = async (fileName) => {
+    const storage = getUxpStorage();
+    const dataFolder = await storage.localFileSystem.getDataFolder();
+    const assetsFolder = await ensureFolder(dataFolder, REFERENCE_ASSET_FOLDER);
+
+    return assetsFolder.createFile(fileName, { overwrite: true });
+};
+
+const blobToUint8Array = async (blob) => {
+    if (blob && typeof blob.arrayBuffer === "function") {
+        return new Uint8Array(await blob.arrayBuffer());
+    }
+
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            resolve(new Uint8Array(reader.result));
+        };
+        reader.onerror = () => {
+            reject(createError("Không thể đọc dữ liệu clipboard.", "CLIPBOARD_READ_FAILED"));
+        };
+        reader.readAsArrayBuffer(blob);
+    });
+};
+
 export const pickReferenceImageFromDisk = async () => {
     const storage = getUxpStorage();
     const file = await storage.localFileSystem.getFileForOpening({
@@ -202,9 +276,98 @@ export const pickReferenceImageFromDisk = async () => {
 
 export const getSupportedReferenceMimeTypes = () => SUPPORTED_REFERENCE_MIME_TYPES.slice();
 
+export const importReferenceFromClipboard = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard || typeof navigator.clipboard.read !== "function") {
+        throw createError("Clipboard image chưa được hỗ trợ trong môi trường hiện tại.", "CLIPBOARD_UNAVAILABLE");
+    }
+
+    const clipboardItems = await navigator.clipboard.read();
+    if (!Array.isArray(clipboardItems) || clipboardItems.length === 0) {
+        throw createError("Clipboard hiện không có dữ liệu ảnh hợp lệ.", "CLIPBOARD_EMPTY");
+    }
+
+    for (const item of clipboardItems) {
+        const imageType = (item.types || []).find((type) => SUPPORTED_REFERENCE_MIME_TYPES.includes(type));
+        if (!imageType) {
+            continue;
+        }
+
+        const blob = await item.getType(imageType);
+        const bytes = await blobToUint8Array(blob);
+        const outputEntry = await createManagedReferenceAssetEntry(
+            `clipboard-${buildUniqueAssetSuffix()}.${getFileExtensionFromMimeType(imageType)}`
+        );
+        const storage = getUxpStorage();
+        await outputEntry.write(bytes, { format: storage.formats.binary });
+
+        return {
+            entry: outputEntry,
+            displayName: `Clipboard ${buildTimestamp()}`,
+            mimeType: imageType
+        };
+    }
+
+    throw createError("Clipboard hiện không có dữ liệu ảnh hợp lệ.", "CLIPBOARD_NO_IMAGE");
+};
+
 export const importReferenceFromQuickLayer = async ({ mode }) => {
-    const suffix = mode === "visible_canvas" ? "canvas đang hiển thị" : "layer hiện tại";
-    throw createError(`Bridge Photoshop cho Lớp nhanh (${suffix}) chưa sẵn sàng trong pass này.`, "QUICK_LAYER_UNAVAILABLE");
+    const photoshop = getPhotoshopModule();
+    const { app, core, constants } = photoshop;
+    const sourceDocument = app && app.activeDocument;
+
+    if (!sourceDocument) {
+        throw createError("Chưa mở document Photoshop.", "NO_ACTIVE_DOCUMENT");
+    }
+
+    const activeLayer = getActiveLayer(sourceDocument);
+    if (mode === "current_layer" && !activeLayer) {
+        throw createError("Không có layer đang chọn để lấy Lớp nhanh.", "NO_ACTIVE_LAYER");
+    }
+
+    const visibleLayers = toArray(sourceDocument.layers).filter((layer) => layer.visible !== false);
+    if (mode === "visible_canvas" && visibleLayers.length === 0) {
+        throw createError("Không có layer hiển thị nào để xuất canvas.", "NO_VISIBLE_LAYERS");
+    }
+
+    const outputEntry = await createManagedReferenceAssetEntry(
+        buildReferenceAssetName(mode === "visible_canvas" ? "visible-canvas" : "current-layer")
+    );
+
+    await core.executeAsModal(async () => {
+        const exportDocument = await app.createDocument({
+            width: normalizeDimension(sourceDocument.width) || 1,
+            height: normalizeDimension(sourceDocument.height) || 1,
+            resolution: sourceDocument.resolution || 72,
+            fill: constants.DocumentFill.TRANSPARENT,
+            mode: constants.NewDocumentMode.RGB,
+            profile: "sRGB IEC61966-2.1"
+        });
+
+        try {
+            if (mode === "visible_canvas") {
+                await sourceDocument.duplicateLayers(visibleLayers, exportDocument);
+                await exportDocument.mergeVisibleLayers();
+            } else {
+                await sourceDocument.duplicateLayers([activeLayer], exportDocument);
+            }
+
+            await exportDocument.saveAs.png(outputEntry, {
+                compression: 6
+            }, true);
+        } catch (error) {
+            throw createError("Photoshop export Lớp nhanh thất bại.", "QUICK_LAYER_EXPORT_FAILED");
+        } finally {
+            await exportDocument.close(constants.SaveDialogOptions.DONOTSAVECHANGES);
+            app.activeDocument = sourceDocument;
+        }
+    }, {
+        commandName: "Export Quick Layer Reference"
+    });
+
+    return {
+        entry: outputEntry,
+        displayName: getQuickLayerDisplayName(mode)
+    };
 };
 
 export const capturePhotoshopContext = async () => {
@@ -230,7 +393,7 @@ export const capturePhotoshopContext = async () => {
     };
 };
 
-export const insertGeneratedImage = async ({ imageBase64, context, layerNamePrefix }) => {
+export const insertGeneratedImage = async ({ imageBase64, mimeType, context, layerNamePrefix }) => {
     const photoshop = getPhotoshopModule();
     const storage = getUxpStorage();
     const documents = toArray(photoshop.app && photoshop.app.documents);
@@ -246,8 +409,8 @@ export const insertGeneratedImage = async ({ imageBase64, context, layerNamePref
     }
 
     const tempFolder = await storage.localFileSystem.getTemporaryFolder();
-    const mimeType = getMimeTypeFromDataUrl(imageBase64, DEFAULT_RESULT_MIME_TYPE);
-    const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+    const normalizedMimeType = normalizeResultMimeType(getMimeTypeFromDataUrl(imageBase64, mimeType || DEFAULT_RESULT_MIME_TYPE));
+    const extension = getFileExtensionFromMimeType(normalizedMimeType);
     const tempFile = await tempFolder.createFile(`tu-do-ai-${Date.now()}.${extension}`, { overwrite: true });
     await tempFile.write(base64ToUint8Array(getBase64Payload(imageBase64)), { format: storage.formats.binary });
     const sessionToken = storage.localFileSystem.createSessionToken(tempFile);

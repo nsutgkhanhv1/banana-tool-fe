@@ -27,6 +27,7 @@
         "https://*.google.com"
       ]
     },
+    "clipboard": "read",
     "localFileSystem": "fullAccess",
     "network": {
       "domains": "all"

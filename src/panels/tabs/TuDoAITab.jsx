@@ -1,60 +1,118 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import {
-    buildImagePreviewUrl,
-    capturePhotoshopContext,
-    insertGeneratedImage,
-    pickReferenceImageFromDisk
-} from '../../lib/photoshop.js';
+import { buildImagePreviewUrl, capturePhotoshopContext, insertGeneratedImage } from '../../lib/photoshop.js';
+import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
+
+const TOOL_KEY = 'tudoai';
+const MAX_REFERENCE_IMAGES = 3;
+
+const mapSourceTypeToApiSource = (sourceType) => {
+    if (sourceType === 'quick_layer_canvas') {
+        return 'photoshop-composite';
+    }
+
+    if (sourceType === 'quick_layer_current') {
+        return 'photoshop-layer';
+    }
+
+    return 'file';
+};
 
 export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
+    const rootRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [insertError, setInsertError] = useState('');
     const [aspectRatio, setAspectRatio] = useState('2:3');
     const [size, setSize] = useState('4K');
-    const [images, setImages] = useState([]);
-    const [activeImageIndex, setActiveImageIndex] = useState(0);
     const [prompt, setPrompt] = useState('');
     const [autoZoom, setAutoZoom] = useState(true);
     const [creativity, setCreativity] = useState('balanced');
     const [result, setResult] = useState(null);
+    const [showQuickLayerOptions, setShowQuickLayerOptions] = useState(false);
+    const {
+        items,
+        activeImageId,
+        activeImageIndex,
+        canAddMore,
+        restoreStatus,
+        restoreNotice,
+        addFromFileEntry,
+        addFromClipboard,
+        addFromQuickLayer,
+        removeImage,
+        selectActiveImage,
+        touchAllImages
+    } = useReferenceImages({
+        toolKey: TOOL_KEY,
+        maxItems: MAX_REFERENCE_IMAGES
+    });
 
-    const canSubmit = useMemo(() => Boolean(prompt.trim()) || images.length > 0, [images.length, prompt]);
+    const canSubmit = useMemo(() => Boolean(prompt.trim()) || items.length > 0, [items.length, prompt]);
 
-    const createRequestPayload = async () => {
+    useEffect(() => {
+        const handlePaste = async (event) => {
+            if (actionsDisabled || !canAddMore) {
+                return;
+            }
+
+            const rootElement = rootRef.current;
+            const activeElement = document.activeElement;
+            const isWithinTab = rootElement && activeElement && rootElement.contains(activeElement);
+
+            if (!isWithinTab) {
+                return;
+            }
+
+            try {
+                await addFromClipboard();
+                setErrorMessage('');
+                if (event && typeof event.preventDefault === 'function') {
+                    event.preventDefault();
+                }
+            } catch (error) {
+                if (error && (error.code === 'CLIPBOARD_EMPTY' || error.code === 'CLIPBOARD_NO_IMAGE')) {
+                    return;
+                }
+
+                setErrorMessage(error && error.message ? error.message : 'Không thể nhập ảnh từ clipboard.');
+            }
+        };
+
+        document.addEventListener('paste', handlePaste);
+        return () => {
+            document.removeEventListener('paste', handlePaste);
+        };
+    }, [actionsDisabled, addFromClipboard, canAddMore]);
+
+    const createGeneratePayload = () => {
         const trimmedPrompt = prompt.trim();
 
-        if (!trimmedPrompt && images.length === 0) {
+        if (!trimmedPrompt && items.length === 0) {
             throw new Error('Nhập prompt hoặc thêm ít nhất 1 ảnh tham chiếu trước khi generate.');
         }
 
-        if (images.length > 3) {
-            throw new Error('Vertical slice này chỉ hỗ trợ tối đa 3 ảnh tham chiếu.');
-        }
-
-        if (images.length > 0 && (activeImageIndex < 0 || activeImageIndex >= images.length)) {
+        if (items.length > 0 && activeImageIndex < 0) {
             throw new Error('Ảnh active hiện không hợp lệ. Hãy chọn lại ảnh tham chiếu.');
         }
 
-        const photoshopContext = await capturePhotoshopContext();
+        touchAllImages();
 
         return {
             prompt: trimmedPrompt,
             ratio: aspectRatio,
             size,
-            referenceImages: images.map((image) => ({
+            referenceImages: items.map((image) => ({
                 imageBase64: image.imageBase64,
-                source: image.source,
-                name: image.name,
+                source: mapSourceTypeToApiSource(image.sourceType),
+                name: image.displayName,
                 mimeType: image.mimeType
             })),
             autoZoom,
             creativity,
-            photoshopContext,
             clientRequestId: `tu-do-ai-${Date.now()}`,
             appVersion: 'uxp-dev',
-            ...(images.length > 0 ? { activeImageIndex } : {})
+            ...(items.length > 0 ? { activeImageIndex } : {})
         };
     };
 
@@ -69,7 +127,18 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
         setIsLoading(true);
 
         try {
-            const payload = await createRequestPayload();
+            const payload = createGeneratePayload();
+            let insertContext = null;
+            let insertFailureMessage = '';
+
+            try {
+                insertContext = await capturePhotoshopContext();
+            } catch (contextError) {
+                insertFailureMessage = contextError && contextError.message
+                    ? contextError.message
+                    : 'Không thể capture Photoshop context tại thời điểm submit.';
+            }
+
             const response = await onGenerate(payload);
 
             if (!response || !response.ok || !response.data) {
@@ -77,7 +146,8 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
                 return;
             }
 
-            const previewUrl = buildImagePreviewUrl(response.data.imageBase64);
+            const resultMimeType = response.data.mimeType || 'image/png';
+            const previewUrl = buildImagePreviewUrl(response.data.imageBase64, resultMimeType);
             let insertState = {
                 status: 'pending',
                 insertedLayerId: null,
@@ -85,34 +155,46 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
                 error: ''
             };
 
-            try {
-                const insertResult = await insertGeneratedImage({
-                    imageBase64: response.data.imageBase64,
-                    context: payload.photoshopContext,
-                    layerNamePrefix: 'Tu Do AI'
-                });
-
-                insertState = {
-                    status: 'success',
-                    insertedLayerId: insertResult.insertedLayerId,
-                    insertedLayerName: insertResult.insertedLayerName,
-                    error: ''
-                };
-            } catch (insertFailure) {
-                const nextInsertError = insertFailure && insertFailure.message
-                    ? insertFailure.message
-                    : 'Generate đã thành công nhưng chèn vào Photoshop thất bại.';
-                setInsertError(nextInsertError);
+            if (!insertContext) {
+                setInsertError(insertFailureMessage);
                 insertState = {
                     status: 'failed',
                     insertedLayerId: null,
                     insertedLayerName: '',
-                    error: nextInsertError
+                    error: insertFailureMessage
                 };
+            } else {
+                try {
+                    const insertResult = await insertGeneratedImage({
+                        imageBase64: response.data.imageBase64,
+                        mimeType: resultMimeType,
+                        context: insertContext,
+                        layerNamePrefix: 'Tu Do AI'
+                    });
+
+                    insertState = {
+                        status: 'success',
+                        insertedLayerId: insertResult.insertedLayerId,
+                        insertedLayerName: insertResult.insertedLayerName,
+                        error: ''
+                    };
+                } catch (insertFailure) {
+                    const nextInsertError = insertFailure && insertFailure.message
+                        ? insertFailure.message
+                        : 'Generate đã thành công nhưng chèn vào Photoshop thất bại.';
+                    setInsertError(nextInsertError);
+                    insertState = {
+                        status: 'failed',
+                        insertedLayerId: null,
+                        insertedLayerName: '',
+                        error: nextInsertError
+                    };
+                }
             }
 
             setResult({
                 imageBase64: response.data.imageBase64,
+                mimeType: resultMimeType,
                 previewUrl,
                 requestId: response.data.requestId,
                 generatedAt: Date.now(),
@@ -126,42 +208,48 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
         }
     };
 
-    const handleAddDemoImage = async () => {
+    const handleAddImage = async () => {
         if (actionsDisabled) {
             onRequireAuth();
             return;
         }
 
-        if (images.length >= 3) {
-            setErrorMessage('Vertical slice này chỉ hỗ trợ tối đa 3 ảnh tham chiếu.');
+        setErrorMessage('');
+        setShowQuickLayerOptions(false);
+
+        try {
+            await addFromFileEntry();
+        } catch (error) {
+            setErrorMessage(error && error.message ? error.message : 'Không thể đọc ảnh tham chiếu từ máy.');
+        }
+    };
+
+    const handleQuickLayerImport = async (mode) => {
+        if (actionsDisabled) {
+            onRequireAuth();
             return;
         }
 
         setErrorMessage('');
 
         try {
-            const image = await pickReferenceImageFromDisk();
-            if (!image) {
-                return;
-            }
-
-            setImages((prev) => [...prev, image]);
-            setActiveImageIndex(images.length);
+            await addFromQuickLayer(mode);
+            setShowQuickLayerOptions(false);
         } catch (error) {
-            setErrorMessage(error && error.message ? error.message : 'Không thể đọc ảnh tham chiếu từ máy.');
+            setErrorMessage(error && error.message ? error.message : 'Không thể lấy ảnh từ Photoshop.');
         }
     };
 
-    const handleQuickLayer = () => {
+    const handleQuickLayerToggle = () => {
         if (actionsDisabled) {
             onRequireAuth();
             return;
         }
 
-        setErrorMessage('`Lớp nhanh` chưa được nối trong pass này. Vertical slice hiện chỉ chốt generate thật và auto-insert.');
+        setShowQuickLayerOptions((current) => !current);
     };
 
-    const handleRemoveImage = (index, e) => {
+    const handleRemoveImage = (imageId, e) => {
         if (actionsDisabled) {
             onRequireAuth();
             return;
@@ -169,17 +257,11 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
 
         e.stopPropagation();
         setErrorMessage('');
-        setImages((prev) => prev.filter((_, imageIndex) => imageIndex !== index));
-
-        if (activeImageIndex === index) {
-            setActiveImageIndex(0);
-        } else if (activeImageIndex > index) {
-            setActiveImageIndex((prev) => prev - 1);
-        }
+        removeImage(imageId);
     };
 
     return (
-        <div className="tab-pane">
+        <div className="tab-pane" ref={rootRef} tabIndex={0}>
             <div className={`app-overlay ${isLoading ? 'active' : ''}`}>
                 <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{color: '#F4B400', width: '24px', height: '24px'}}>
                     <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
@@ -213,31 +295,33 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
             <div className="section">
                 <div className="section-header">
                     <span className="section-label">Ảnh tham chiếu</span>
-                    <span className="section-subtitle">{images.length}/3</span>
+                    <span className="section-subtitle">
+                        {restoreStatus === 'restoring' ? 'Đang khôi phục...' : `${items.length}/${MAX_REFERENCE_IMAGES}`}
+                    </span>
                 </div>
 
-                {images.length === 0 ? (
+                {items.length === 0 ? (
                     <div className="empty-state">
                         <svg className="empty-state-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                         <span>Chưa có ảnh</span>
                     </div>
                 ) : (
                     <div className="reference-grid">
-                        {images.map((img, idx) => (
+                        {items.map((image) => (
                             <div
-                                key={img.id}
-                                className={`ref-image ${activeImageIndex === idx ? 'active' : ''}`}
-                                title={`Ảnh ${idx + 1}`}
-                                onClick={() => setActiveImageIndex(idx)}
+                                key={image.id}
+                                className={`ref-image ${activeImageId === image.id ? 'active' : ''}`}
+                                title={image.displayName}
+                                onClick={() => selectActiveImage(image.id)}
                             >
-                                <div className="ref-delete" onClick={(e) => handleRemoveImage(idx, e)}>
+                                <div className="ref-delete" onClick={(e) => handleRemoveImage(image.id, e)}>
                                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                 </div>
-                                <img src={img.previewUrl} alt="ref" />
+                                <img src={image.previewUrl} alt={image.displayName} />
                             </div>
                         ))}
-                        {images.length < 3 ? (
-                            <div className="ref-add" title="Thêm ảnh" onClick={handleAddDemoImage}>
+                        {canAddMore ? (
+                            <div className="ref-add" title="Thêm ảnh" onClick={handleAddImage}>
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             </div>
                         ) : null}
@@ -245,9 +329,26 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
                 )}
 
                 <div className="flex-row">
-                    <button className="btn full-width" onClick={handleAddDemoImage} disabled={actionsDisabled}>Chọn Ảnh</button>
-                    <button className="btn full-width" onClick={handleQuickLayer} disabled={actionsDisabled}>Lớp nhanh</button>
+                    <button className="btn full-width" onClick={handleAddImage} disabled={actionsDisabled || !canAddMore}>Chọn Ảnh</button>
+                    <button className="btn full-width" onClick={handleQuickLayerToggle} disabled={actionsDisabled || !canAddMore}>Lớp nhanh</button>
                 </div>
+
+                {showQuickLayerOptions ? (
+                    <div className="quick-layer-panel">
+                        <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled}>
+                            Layer hiện tại
+                        </button>
+                        <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.VISIBLE_CANVAS)} disabled={actionsDisabled}>
+                            Toàn bộ canvas đang hiển thị
+                        </button>
+                    </div>
+                ) : null}
+
+                {restoreNotice ? (
+                    <div className="reference-note">{restoreNotice}</div>
+                ) : null}
+
+                <div className="reference-note">Dán ảnh từ clipboard bằng `Cmd/Ctrl + V` khi tab đang focus.</div>
             </div>
 
             <div className="section">
@@ -333,7 +434,7 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate }) => {
                 <button
                     className="btn primary full-width"
                     onClick={handleCreate}
-                    disabled={isLoading || actionsDisabled || !canSubmit}
+                    disabled={isLoading || actionsDisabled || !canSubmit || restoreStatus === 'restoring'}
                 >
                     {isLoading ? (
                         <>

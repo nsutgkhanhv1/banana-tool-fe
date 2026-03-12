@@ -914,6 +914,18 @@ body::after {
     color: #ffb2b2;
 }
 
+.quick-layer-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.reference-note {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
 .switch {
   position: relative;
   display: inline-block;

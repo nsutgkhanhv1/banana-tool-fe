@@ -756,6 +756,13 @@ export const App = () => {
         })
     ), [submitGenerateRequest]);
 
+    const submitThayNenGenerate = useCallback(async (payload) => (
+        submitGenerateRequest({
+            path: "/images/thay-nen/generate",
+            body: payload
+        })
+    ), [submitGenerateRequest]);
+
     const submitTuDoAIGenerate = useCallback(async (payload) => (
         submitGenerateRequest({
             path: "/images/tu-do-ai/generate",
@@ -810,12 +817,12 @@ export const App = () => {
                         refreshVersion={tabRefreshVersion}
                         actionsDisabled={tabProps.actionsDisabled}
                         onRequireAuth={tabProps.onRequireAuth}
-                        onGenerate={tab.id === "tudoai" ? submitTuDoAIGenerate : tabProps.onGenerate}
+                        onGenerate={tab.id === "tudoai" ? submitTuDoAIGenerate : tab.id === "thaynen" ? submitThayNenGenerate : tabProps.onGenerate}
                     />
                 </div>
             );
         })
-    ), [activeTab, submitTuDoAIGenerate, tabProps.actionsDisabled, tabProps.onGenerate, tabProps.onRequireAuth, tabRefreshVersion]);
+    ), [activeTab, submitThayNenGenerate, submitTuDoAIGenerate, tabProps.actionsDisabled, tabProps.onGenerate, tabProps.onRequireAuth, tabRefreshVersion]);
 
     if (bootStatus !== "ready") {
         return (
