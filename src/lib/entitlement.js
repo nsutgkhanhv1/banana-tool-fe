@@ -5,6 +5,7 @@ const STATUS_LABELS = {
 };
 
 const DENY_MESSAGES = {
+    account_inactive: "Tài khoản của bạn hiện đang bị tạm ngưng generate",
     no_credit: "Bạn đã hết credit",
     subscription_expired: "Gói của bạn đã hết hạn",
     subscription_suspended: "Tài khoản sử dụng hiện đang bị tạm khóa",
@@ -44,13 +45,13 @@ export const getEntitlementUiState = (entitlement) => {
     const denyMessage = DENY_MESSAGES[denyReason] || (entitlement.canGenerate ? "Bạn có thể generate bình thường." : "Chưa có dữ liệu");
 
     let severity = "normal";
-    if (denyReason === "subscription_suspended" || denyReason === "subscription_expired" || denyReason === "no_credit") {
+    if (denyReason === "account_inactive" || denyReason === "subscription_suspended" || denyReason === "subscription_expired" || denyReason === "no_credit") {
         severity = "danger";
     } else if (lowCredit) {
         severity = "warning";
     }
 
-    const primaryAction = denyReason === "subscription_suspended"
+    const primaryAction = denyReason === "subscription_suspended" || denyReason === "account_inactive"
         ? { type: "support", label: "Liên hệ hỗ trợ" }
         : { type: "purchase", label: "Mua credit / subscription" };
 

@@ -13,7 +13,7 @@ import {
     PLUGIN_SUPPORT_LINK
 } from "../lib/plugin-config.js";
 import { persistPluginSettings, readPluginSettings } from "../lib/plugin-settings.js";
-import { purchaseGateway } from "../lib/purchase.js";
+import { createPurchaseGateway } from "../lib/purchase.js";
 import { capturePhotoshopContext, insertGeneratedImage } from "../lib/photoshop.js";
 import { appendHistoryItem, loadHistoryItems, updateHistoryItemInsertState } from "../lib/result-history.js";
 import { ThayNenTab } from "./tabs/ThayNenTab.jsx";
@@ -1016,6 +1016,10 @@ export const App = () => {
         detail: shellLocked ? "Đăng nhập để đồng bộ" : "Không thể cập nhật trạng thái mới nhất",
         severity: "neutral"
     };
+    const purchaseGateway = useMemo(() => createPurchaseGateway({
+        getSession: () => session,
+        onSessionRefresh: handleSessionChange
+    }), [handleSessionChange, session]);
 
     const tabProps = useMemo(() => ({
         actionsDisabled: shellLocked,

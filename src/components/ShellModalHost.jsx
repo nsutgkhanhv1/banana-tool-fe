@@ -1027,7 +1027,7 @@ const PurchaseModal = ({ userProfile, purchaseGateway, onClose, onOpenCreditSubs
     const handleViewOtherPackages = () => {
         setCurrentOrder(null);
         setSelectedType(currentOrder ? currentOrder.purchaseType : "");
-        setNotice("Bạn vẫn đang có một draft order mở. Chọn gói khác lúc này sẽ quay lại order hiện tại cho tới khi có flow hủy hoặc tạo lại draft.");
+        setNotice("Bạn vẫn đang có một draft order mở. Catalog bên dưới chỉ để tham khảo; nếu chọn gói khác lúc này, plugin sẽ quay lại order hiện tại cho tới khi có flow hủy hoặc tạo lại draft.");
         setError("");
         setQrFailed(false);
     };
@@ -1111,7 +1111,7 @@ const PurchaseModal = ({ userProfile, purchaseGateway, onClose, onOpenCreditSubs
         <div className="modal-stack">
             <div className="purchase-inline-header">
                 <button className="back-link" onClick={handleViewOtherPackages}>
-                    ← Xem gói khác
+                    ← Xem lại catalog
                 </button>
                 <span className={`purchase-status-badge status-${currentOrder.status}`}>{currentStatusLabel}</span>
             </div>
