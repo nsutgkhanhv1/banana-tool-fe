@@ -14,7 +14,11 @@ import {
 } from "../lib/plugin-config.js";
 import { persistPluginSettings, readPluginSettings } from "../lib/plugin-settings.js";
 import { createPurchaseGateway } from "../lib/purchase.js";
-import { capturePhotoshopContext, insertGeneratedImage } from "../lib/photoshop.js";
+import {
+    captureInsertContextSafely,
+    createResultImageRecord,
+    performResultInsert
+} from "../lib/result-insert.js";
 import { appendHistoryItem, loadHistoryItems, updateHistoryItemInsertState } from "../lib/result-history.js";
 import { ThayNenTab } from "./tabs/ThayNenTab.jsx";
 import { PhucCheTab } from "./tabs/PhucCheTab.jsx";
@@ -504,22 +508,35 @@ export const App = () => {
         }
 
         try {
-            const insertContext = await capturePhotoshopContext();
-            const insertResult = await insertGeneratedImage({
+            const insertContext = await captureInsertContextSafely({
+                fallbackMessage: "Không có Photoshop context phù hợp để chèn lại."
+            });
+            const resultImage = createResultImageRecord({
                 imageBase64: item.previewUrl,
-                mimeType: item.resultAsset && item.resultAsset.mimeType ? item.resultAsset.mimeType : "image/png",
-                context: insertContext,
+                mimeType: item.resultMeta && item.resultMeta.mimeType
+                    ? item.resultMeta.mimeType
+                    : item.resultAsset && item.resultAsset.mimeType
+                        ? item.resultAsset.mimeType
+                        : "image/png",
+                featureKey: item.featureKey || "history-result",
+                requestId: item.requestId || item.historyId,
+                fileName: item.resultMeta && item.resultMeta.fileName ? item.resultMeta.fileName : "",
+                displayName: item.resultMeta && item.resultMeta.displayName
+                    ? item.resultMeta.displayName
+                    : item.resultAsset && item.resultAsset.displayName
+                        ? item.resultAsset.displayName
+                        : `${item.featureLabel || "AI Result"} Result`,
                 layerNamePrefix: item.layerNamePrefix
             });
-
-            const nextInsertState = {
-                status: "success",
-                insertedLayerId: insertResult.insertedLayerId,
-                insertedLayerName: insertResult.insertedLayerName,
-                error: "",
+            const nextInsertState = await performResultInsert({
+                resultImage,
+                context: insertContext.context,
                 mode: "reinsert",
-                updatedAt: Date.now()
-            };
+                missingContextError: insertContext.error,
+                missingContextErrorCode: insertContext.errorCode,
+                fallbackFailureMessage: "Không thể chèn lại ảnh từ lịch sử."
+            });
+
             const items = await updateHistoryItemInsertState({
                 namespace: historyNamespace,
                 historyId: item.historyId,
@@ -529,38 +546,27 @@ export const App = () => {
             setHistoryItems(items);
             setHistoryStatus("ready");
             setHistoryError("");
-            showToast("Đã chèn lại ảnh từ lịch sử vào Photoshop.", "success");
 
-            return {
-                ok: true
-            };
-        } catch (error) {
-            const nextInsertState = {
-                status: "failed",
-                insertedLayerId: null,
-                insertedLayerName: "",
-                error: error && error.message ? error.message : "Không thể chèn lại ảnh từ lịch sử.",
-                mode: "reinsert",
-                updatedAt: Date.now()
-            };
-
-            try {
-                const items = await updateHistoryItemInsertState({
-                    namespace: historyNamespace,
-                    historyId: item.historyId,
-                    insert: nextInsertState
-                });
-                setHistoryItems(items);
-                setHistoryStatus("ready");
-            } catch (updateError) {
-                // Keep original history item even if local insert status cannot be updated.
+            if (nextInsertState.status === "success") {
+                showToast("Đã chèn lại ảnh từ lịch sử vào Photoshop.", "success");
+                return {
+                    ok: true
+                };
             }
 
             showToast(nextInsertState.error, "error");
-
             return {
                 ok: false,
                 error: nextInsertState.error
+            };
+        } catch (error) {
+            showToast(
+                error && error.message ? error.message : "Không thể cập nhật trạng thái reinsert trong lịch sử.",
+                "error"
+            );
+            return {
+                ok: false,
+                error: error && error.message ? error.message : "Không thể cập nhật trạng thái reinsert trong lịch sử."
             };
         }
     }, [historyNamespace, showToast]);

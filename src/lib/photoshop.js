@@ -130,6 +130,24 @@ const getFileExtensionFromMimeType = (mimeType) => {
     return "jpg";
 };
 
+const sanitizeFileNameSegment = (value, fallback = "asset") => {
+    const normalized = String(value || "")
+        .trim()
+        .replace(/\.[^/.]+$/, "")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+
+    return normalized || fallback;
+};
+
+const buildTempInsertFileName = (fileName, mimeType) => {
+    const extension = getFileExtensionFromMimeType(mimeType);
+    const normalizedBaseName = sanitizeFileNameSegment(fileName, "ai-result");
+
+    return `${normalizedBaseName}.${extension}`;
+};
+
 const buildUniqueAssetSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const buildReferenceAssetName = (prefix) => `${prefix}-${buildUniqueAssetSuffix()}.${getFileExtensionFromMimeType(REFERENCE_ASSET_MIME_TYPE)}`;
@@ -347,6 +365,7 @@ export const writeManagedImageAsset = async ({
 
     return {
         ...imageAsset,
+        fileName,
         persistentToken: await createPersistentTokenForEntry(outputEntry)
     };
 };
@@ -430,31 +449,60 @@ export const capturePhotoshopContext = async () => {
         documentName: document.title || document.name || "",
         layerName: layer.name || "",
         documentWidth: normalizeDimension(document.width),
-        documentHeight: normalizeDimension(document.height)
+        documentHeight: normalizeDimension(document.height),
+        capturedAt: Date.now()
     };
 };
 
-export const insertGeneratedImage = async ({ imageBase64, mimeType, context, layerNamePrefix }) => {
+export const insertGeneratedImage = async ({ imageBase64, mimeType, context, layerNamePrefix, fileName }) => {
+    const base64Payload = getBase64Payload(imageBase64 || "");
+
+    if (!base64Payload) {
+        throw createError("Không có ảnh kết quả hợp lệ để chèn vào Photoshop.", "INVALID_RESULT_IMAGE");
+    }
+
+    if (!context || typeof context.documentId === "undefined" || typeof context.layerId === "undefined") {
+        throw createError("Thiếu Photoshop context để chèn kết quả.", "INVALID_INSERT_CONTEXT");
+    }
+
     const photoshop = getPhotoshopModule();
     const storage = getUxpStorage();
     const documents = toArray(photoshop.app && photoshop.app.documents);
     const targetDocument = documents.find((item) => Number(item.id) === Number(context.documentId));
 
     if (!targetDocument) {
-        throw createError("Document gốc không còn tồn tại để chèn kết quả.", "INVALID_INSERT_CONTEXT");
+        const documentLabel = context.documentName ? `Document "${context.documentName}"` : "Document gốc";
+        throw createError(`${documentLabel} không còn tồn tại để chèn kết quả.`, "INVALID_INSERT_CONTEXT");
     }
 
     const targetLayer = findLayerById(targetDocument.layers, context.layerId);
     if (!targetLayer) {
-        throw createError("Layer gốc không còn tồn tại để chèn kết quả.", "INVALID_INSERT_CONTEXT");
+        const layerLabel = context.layerName ? `Layer "${context.layerName}"` : "Layer gốc";
+        throw createError(`${layerLabel} không còn tồn tại để chèn kết quả.`, "INVALID_INSERT_CONTEXT");
     }
 
     const tempFolder = await storage.localFileSystem.getTemporaryFolder();
     const normalizedMimeType = normalizeResultMimeType(getMimeTypeFromDataUrl(imageBase64, mimeType || DEFAULT_RESULT_MIME_TYPE));
-    const extension = getFileExtensionFromMimeType(normalizedMimeType);
-    const tempFile = await tempFolder.createFile(`tu-do-ai-${Date.now()}.${extension}`, { overwrite: true });
-    await tempFile.write(base64ToUint8Array(getBase64Payload(imageBase64)), { format: storage.formats.binary });
-    const sessionToken = storage.localFileSystem.createSessionToken(tempFile);
+    let tempFile = null;
+
+    try {
+        tempFile = await tempFolder.createFile(
+            buildTempInsertFileName(fileName || `${layerNamePrefix || "ai-result"}-${buildUniqueAssetSuffix()}`, normalizedMimeType),
+            { overwrite: true }
+        );
+        await tempFile.write(base64ToUint8Array(base64Payload), { format: storage.formats.binary });
+    } catch (error) {
+        throw createError("Không thể chuẩn bị file tạm để chèn kết quả vào Photoshop.", "INSERT_FILE_PREP_FAILED");
+    }
+
+    let sessionToken = "";
+
+    try {
+        sessionToken = storage.localFileSystem.createSessionToken(tempFile);
+    } catch (error) {
+        throw createError("Không thể tạo Photoshop session token cho ảnh kết quả.", "INSERT_FILE_PREP_FAILED");
+    }
+
     const layerName = `${layerNamePrefix || "AI Result"} - ${buildTimestamp()}`;
 
     const { action, core } = photoshop;
@@ -463,67 +511,76 @@ export const insertGeneratedImage = async ({ imageBase64, mimeType, context, lay
     await core.executeAsModal(async () => {
         photoshop.app.activeDocument = targetDocument;
 
-        await action.batchPlay(
-            [
-                {
-                    _obj: "select",
-                    _target: [
-                        { _ref: "layer", _id: Number(context.layerId) },
-                        { _ref: "document", _id: Number(context.documentId) }
-                    ],
-                    makeVisible: false,
-                    layerID: [Number(context.layerId)],
-                    _options: {
-                        dialogOptions: "dontDisplay"
+        try {
+            await action.batchPlay(
+                [
+                    {
+                        _obj: "select",
+                        _target: [
+                            { _ref: "layer", _id: Number(context.layerId) },
+                            { _ref: "document", _id: Number(context.documentId) }
+                        ],
+                        makeVisible: false,
+                        layerID: [Number(context.layerId)],
+                        _options: {
+                            dialogOptions: "dontDisplay"
+                        }
                     }
-                }
-            ],
-            {
-                synchronousExecution: true,
-                modalBehavior: "fail"
-            }
-        );
-
-        await action.batchPlay(
-            [
+                ],
                 {
-                    _obj: "placeEvent",
-                    null: {
-                        _path: sessionToken,
-                        _kind: "local"
-                    },
-                    freeTransformCenterState: {
-                        _enum: "quadCenterState",
-                        _value: "QCSAverage"
-                    },
-                    offset: {
-                        _obj: "offset",
-                        horizontal: {
-                            _unit: "pixelsUnit",
-                            _value: 0
+                    synchronousExecution: true,
+                    modalBehavior: "fail"
+                }
+            );
+        } catch (error) {
+            const layerLabel = context.layerName ? `Layer "${context.layerName}"` : "Layer gốc";
+            throw createError(`${layerLabel} không còn khả dụng để chèn kết quả.`, "INVALID_INSERT_CONTEXT");
+        }
+
+        try {
+            await action.batchPlay(
+                [
+                    {
+                        _obj: "placeEvent",
+                        null: {
+                            _path: sessionToken,
+                            _kind: "local"
                         },
-                        vertical: {
-                            _unit: "pixelsUnit",
-                            _value: 0
+                        freeTransformCenterState: {
+                            _enum: "quadCenterState",
+                            _value: "QCSAverage"
+                        },
+                        offset: {
+                            _obj: "offset",
+                            horizontal: {
+                                _unit: "pixelsUnit",
+                                _value: 0
+                            },
+                            vertical: {
+                                _unit: "pixelsUnit",
+                                _value: 0
+                            }
+                        },
+                        _options: {
+                            dialogOptions: "dontDisplay"
                         }
                     },
-                    _options: {
-                        dialogOptions: "dontDisplay"
+                    {
+                        _obj: "rasterizeLayer",
+                        _target: [{ _ref: "layer", _enum: "ordinal", _value: "targetEnum" }],
+                        _options: {
+                            dialogOptions: "dontDisplay"
+                        }
                     }
-                },
+                ],
                 {
-                    _obj: "rasterizeLayer",
-                    _target: [{ _ref: "layer", _enum: "ordinal", _value: "targetEnum" }],
-                    _options: {
-                        dialogOptions: "dontDisplay"
-                    }
+                    synchronousExecution: true,
+                    modalBehavior: "fail"
                 }
-            ],
-            {
-                synchronousExecution: true,
-                modalBehavior: "fail"
-            }
-        );
+            );
+        } catch (error) {
+            throw createError("Photoshop không thể place kết quả AI vào document đã capture.", "INSERT_FAILED");
+        }
 
         const insertedLayer = getActiveLayer(photoshop.app.activeDocument);
         if (!insertedLayer) {

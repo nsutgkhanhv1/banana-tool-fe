@@ -3,6 +3,7 @@ import {
     readReferenceImageFromEntry,
     writeManagedImageAsset
 } from "./photoshop.js";
+import { createInsertState, normalizeCapturedContext } from "./result-insert.js";
 
 const HISTORY_STORAGE_KEY_PREFIX = "banana-tool.result-history.v1";
 
@@ -67,13 +68,21 @@ const writeStoredHistoryState = (namespace, items) => {
     }));
 };
 
-const normalizeInsertState = (insert) => ({
-    status: insert && insert.status ? insert.status : "failed",
-    insertedLayerId: insert && typeof insert.insertedLayerId !== "undefined" ? insert.insertedLayerId : null,
-    insertedLayerName: insert && insert.insertedLayerName ? insert.insertedLayerName : "",
-    error: insert && insert.error ? insert.error : "",
-    mode: insert && insert.mode ? insert.mode : "auto",
-    updatedAt: insert && insert.updatedAt ? insert.updatedAt : Date.now()
+const serializeCapturedContext = (context) => {
+    const normalizedContext = normalizeCapturedContext(context);
+
+    return normalizedContext
+        ? {
+            ...normalizedContext
+        }
+        : null;
+};
+
+const serializeResultMeta = (resultImage, layerNamePrefix) => ({
+    fileName: resultImage && resultImage.fileName ? resultImage.fileName : "",
+    displayName: resultImage && resultImage.displayName ? resultImage.displayName : "",
+    mimeType: resultImage && resultImage.mimeType ? resultImage.mimeType : "image/png",
+    layerNamePrefix: layerNamePrefix || (resultImage && resultImage.layerNamePrefix ? resultImage.layerNamePrefix : "AI Result")
 });
 
 const serializeReferenceImages = (referenceImages) => (
@@ -126,10 +135,13 @@ const buildStoredHistoryItem = async (draft) => {
         settingsSnapshot: draft.settingsSnapshot || null,
         summaryLines: Array.isArray(draft.summaryLines) ? draft.summaryLines.filter(Boolean).slice(0, 6) : [],
         errorSummary: draft.errorSummary || "",
-        insert: normalizeInsertState(draft.insert),
+        insert: createInsertState(draft.insert),
+        capturedContext: serializeCapturedContext(draft.capturedContext),
+        resultMeta: serializeResultMeta(draft.resultImage, draft.layerNamePrefix),
         resultAsset: {
             persistentToken: resultAsset.persistentToken,
             displayName: resultAsset.displayName,
+            fileName: resultAsset.fileName,
             mimeType: resultAsset.mimeType,
             storagePath: resultAsset.storagePath,
             width: resultAsset.width,
@@ -215,8 +227,8 @@ export const updateHistoryItemInsertState = async ({ namespace, historyId, inser
         item.historyId === historyId
             ? {
                 ...item,
-                insert: normalizeInsertState(insert),
-                errorSummary: insert && insert.error ? insert.error : item.errorSummary
+                insert: createInsertState(insert),
+                errorSummary: insert && insert.error ? insert.error : ""
             }
             : item
     ));

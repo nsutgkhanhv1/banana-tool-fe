@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import { buildImagePreviewUrl, capturePhotoshopContext, insertGeneratedImage } from '../../lib/photoshop.js';
+import {
+    buildGeneratedResultState,
+    captureInsertContextSafely,
+    createResultImageRecord,
+    performResultInsert
+} from '../../lib/result-insert.js';
 import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
 
 const TOOL_KEY = 'thaynen';
@@ -40,7 +45,6 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     const handledRestoreIdRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
-    const [insertError, setInsertError] = useState('');
     const [historyNotice, setHistoryNotice] = useState('');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [size, setSize] = useState('4K');
@@ -124,7 +128,6 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
             setIsLoading(false);
             setErrorMessage('');
-            setInsertError('');
             setResult(null);
             setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
             setAspectRatio(payload.aspectRatio || '3:4');
@@ -186,22 +189,14 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         }
 
         setErrorMessage('');
-        setInsertError('');
         setHistoryNotice('');
         setIsLoading(true);
 
         try {
             const payload = createGeneratePayload();
-            let insertContext = null;
-            let insertFailureMessage = '';
-
-            try {
-                insertContext = await capturePhotoshopContext();
-            } catch (contextError) {
-                insertFailureMessage = contextError && contextError.message
-                    ? contextError.message
-                    : 'Không thể capture Photoshop context tại thời điểm submit.';
-            }
+            const insertContext = await captureInsertContextSafely({
+                fallbackMessage: 'Không thể capture Photoshop context tại thời điểm submit.'
+            });
 
             const response = await onGenerate(payload);
 
@@ -210,61 +205,34 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                 return;
             }
 
-            const resultMimeType = response.data.mimeType || 'image/png';
-            const previewUrl = buildImagePreviewUrl(response.data.imageBase64, resultMimeType);
-            let insertState = {
-                status: 'pending',
-                insertedLayerId: null,
-                insertedLayerName: '',
-                error: ''
-            };
-
-            if (!insertContext) {
-                setInsertError(insertFailureMessage);
-                insertState = {
-                    status: 'failed',
-                    insertedLayerId: null,
-                    insertedLayerName: '',
-                    error: insertFailureMessage
-                };
-            } else {
-                try {
-                    const insertResult = await insertGeneratedImage({
-                        imageBase64: response.data.imageBase64,
-                        mimeType: resultMimeType,
-                        context: insertContext,
-                        layerNamePrefix: 'Thay Nen'
-                    });
-
-                    insertState = {
-                        status: 'success',
-                        insertedLayerId: insertResult.insertedLayerId,
-                        insertedLayerName: insertResult.insertedLayerName,
-                        error: ''
-                    };
-                } catch (insertFailure) {
-                    const nextInsertError = insertFailure && insertFailure.message
-                        ? insertFailure.message
-                        : 'Generate đã thành công nhưng chèn vào Photoshop thất bại.';
-                    setInsertError(nextInsertError);
-                    insertState = {
-                        status: 'failed',
-                        insertedLayerId: null,
-                        insertedLayerName: '',
-                        error: nextInsertError
-                    };
-                }
-            }
-
-            const nextResult = {
+            const generatedAt = Date.now();
+            const resultImage = createResultImageRecord({
                 imageBase64: response.data.imageBase64,
-                mimeType: resultMimeType,
-                previewUrl,
-                requestId: response.data.requestId,
-                generatedAt: Date.now(),
-                inputSummary: response.data.inputSummary || null,
-                insert: insertState
-            };
+                mimeType: response.data.mimeType,
+                featureKey: TOOL_KEY,
+                requestId: response.data.requestId || generatedAt,
+                fileName: `thay-nen-${response.data.requestId || generatedAt}`,
+                displayName: `thay-nen-${response.data.requestId || generatedAt}`,
+                layerNamePrefix: 'Thay Nen'
+            });
+            const insertState = await performResultInsert({
+                resultImage,
+                context: insertContext.context,
+                mode: 'auto',
+                missingContextError: insertContext.error,
+                missingContextErrorCode: insertContext.errorCode,
+                fallbackFailureMessage: 'Generate đã thành công nhưng chèn vào Photoshop thất bại.'
+            });
+            const nextResult = buildGeneratedResultState({
+                resultImage,
+                responseData: response.data,
+                featureKey: TOOL_KEY,
+                featureLabel: 'Thay Nền',
+                layerNamePrefix: 'Thay Nen',
+                capturedContext: insertContext.context,
+                insert: insertState,
+                generatedAt
+            });
 
             setResult(nextResult);
 
@@ -293,15 +261,14 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         `Độ mạnh thay nền: ${REPLACEMENT_STRENGTH_OPTIONS.find((option) => option.id === payload.replacementStrength)?.label || payload.replacementStrength}`
                     ],
                     errorSummary: insertState.error || '',
-                    insert: {
-                        ...insertState,
-                        mode: 'auto',
-                        updatedAt: Date.now()
-                    },
+                    capturedContext: insertContext.context,
+                    insert: insertState,
                     resultImage: {
-                        imageBase64: response.data.imageBase64,
-                        mimeType: resultMimeType,
-                        displayName: `thay-nen-${response.data.requestId || Date.now()}`
+                        imageBase64: resultImage.imageBase64,
+                        mimeType: resultImage.mimeType,
+                        displayName: resultImage.displayName,
+                        fileName: resultImage.fileName,
+                        layerNamePrefix: resultImage.layerNamePrefix
                     },
                     rehydrationPayload: {
                         tabId: TOOL_KEY,
@@ -580,8 +547,8 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                             {result.insert.insertedLayerName ? (
                                 <div className="result-detail">Layer mới: {result.insert.insertedLayerName}</div>
                             ) : null}
-                            {insertError ? (
-                                <div className="result-detail result-detail-error">{insertError}</div>
+                            {result.insert.error ? (
+                                <div className="result-detail result-detail-error">{result.insert.error}</div>
                             ) : null}
                         </div>
                     </div>

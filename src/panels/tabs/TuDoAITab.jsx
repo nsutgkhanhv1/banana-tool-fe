@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import { buildImagePreviewUrl, capturePhotoshopContext, insertGeneratedImage } from '../../lib/photoshop.js';
+import {
+    buildGeneratedResultState,
+    captureInsertContextSafely,
+    createResultImageRecord,
+    performResultInsert
+} from '../../lib/result-insert.js';
 import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
 
 const TOOL_KEY = 'tudoai';
@@ -23,7 +28,6 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
     const handledRestoreIdRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
-    const [insertError, setInsertError] = useState('');
     const [historyNotice, setHistoryNotice] = useState('');
     const [aspectRatio, setAspectRatio] = useState('2:3');
     const [size, setSize] = useState('4K');
@@ -105,7 +109,6 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
 
             setIsLoading(false);
             setErrorMessage('');
-            setInsertError('');
             setResult(null);
             setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
             setAspectRatio(payload.aspectRatio || '2:3');
@@ -170,22 +173,14 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
         }
 
         setErrorMessage('');
-        setInsertError('');
         setHistoryNotice('');
         setIsLoading(true);
 
         try {
             const payload = createGeneratePayload();
-            let insertContext = null;
-            let insertFailureMessage = '';
-
-            try {
-                insertContext = await capturePhotoshopContext();
-            } catch (contextError) {
-                insertFailureMessage = contextError && contextError.message
-                    ? contextError.message
-                    : 'Không thể capture Photoshop context tại thời điểm submit.';
-            }
+            const insertContext = await captureInsertContextSafely({
+                fallbackMessage: 'Không thể capture Photoshop context tại thời điểm submit.'
+            });
 
             const response = await onGenerate(payload);
 
@@ -194,61 +189,34 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
                 return;
             }
 
-            const resultMimeType = response.data.mimeType || 'image/png';
-            const previewUrl = buildImagePreviewUrl(response.data.imageBase64, resultMimeType);
-            let insertState = {
-                status: 'pending',
-                insertedLayerId: null,
-                insertedLayerName: '',
-                error: ''
-            };
-
-            if (!insertContext) {
-                setInsertError(insertFailureMessage);
-                insertState = {
-                    status: 'failed',
-                    insertedLayerId: null,
-                    insertedLayerName: '',
-                    error: insertFailureMessage
-                };
-            } else {
-                try {
-                    const insertResult = await insertGeneratedImage({
-                        imageBase64: response.data.imageBase64,
-                        mimeType: resultMimeType,
-                        context: insertContext,
-                        layerNamePrefix: 'Tu Do AI'
-                    });
-
-                    insertState = {
-                        status: 'success',
-                        insertedLayerId: insertResult.insertedLayerId,
-                        insertedLayerName: insertResult.insertedLayerName,
-                        error: ''
-                    };
-                } catch (insertFailure) {
-                    const nextInsertError = insertFailure && insertFailure.message
-                        ? insertFailure.message
-                        : 'Generate đã thành công nhưng chèn vào Photoshop thất bại.';
-                    setInsertError(nextInsertError);
-                    insertState = {
-                        status: 'failed',
-                        insertedLayerId: null,
-                        insertedLayerName: '',
-                        error: nextInsertError
-                    };
-                }
-            }
-
-            const nextResult = {
+            const generatedAt = Date.now();
+            const resultImage = createResultImageRecord({
                 imageBase64: response.data.imageBase64,
-                mimeType: resultMimeType,
-                previewUrl,
-                requestId: response.data.requestId,
-                generatedAt: Date.now(),
-                inputSummary: response.data.inputSummary || null,
-                insert: insertState
-            };
+                mimeType: response.data.mimeType,
+                featureKey: TOOL_KEY,
+                requestId: response.data.requestId || generatedAt,
+                fileName: `tu-do-ai-${response.data.requestId || generatedAt}`,
+                displayName: `tu-do-ai-${response.data.requestId || generatedAt}`,
+                layerNamePrefix: 'Tu Do AI'
+            });
+            const insertState = await performResultInsert({
+                resultImage,
+                context: insertContext.context,
+                mode: 'auto',
+                missingContextError: insertContext.error,
+                missingContextErrorCode: insertContext.errorCode,
+                fallbackFailureMessage: 'Generate đã thành công nhưng chèn vào Photoshop thất bại.'
+            });
+            const nextResult = buildGeneratedResultState({
+                resultImage,
+                responseData: response.data,
+                featureKey: TOOL_KEY,
+                featureLabel: 'Tự Do AI',
+                layerNamePrefix: 'Tu Do AI',
+                capturedContext: insertContext.context,
+                insert: insertState,
+                generatedAt
+            });
 
             setResult(nextResult);
 
@@ -277,15 +245,14 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
                         `Tự động thu phóng: ${payload.autoZoom ? 'Bật' : 'Tắt'}`
                     ],
                     errorSummary: insertState.error || '',
-                    insert: {
-                        ...insertState,
-                        mode: 'auto',
-                        updatedAt: Date.now()
-                    },
+                    capturedContext: insertContext.context,
+                    insert: insertState,
                     resultImage: {
-                        imageBase64: response.data.imageBase64,
-                        mimeType: resultMimeType,
-                        displayName: `tu-do-ai-${response.data.requestId || Date.now()}`
+                        imageBase64: resultImage.imageBase64,
+                        mimeType: resultImage.mimeType,
+                        displayName: resultImage.displayName,
+                        fileName: resultImage.fileName,
+                        layerNamePrefix: resultImage.layerNamePrefix
                     },
                     rehydrationPayload: {
                         tabId: TOOL_KEY,
@@ -537,8 +504,8 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
                             {result.insert.insertedLayerName ? (
                                 <div className="result-detail">Layer mới: {result.insert.insertedLayerName}</div>
                             ) : null}
-                            {insertError ? (
-                                <div className="result-detail result-detail-error">{insertError}</div>
+                            {result.insert.error ? (
+                                <div className="result-detail result-detail-error">{result.insert.error}</div>
                             ) : null}
                         </div>
                     </div>

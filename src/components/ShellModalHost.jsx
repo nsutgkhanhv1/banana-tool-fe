@@ -714,6 +714,20 @@ const HistoryModal = ({
                                                 <div className="history-meta-line">Layer gần nhất: {item.insert.insertedLayerName}</div>
                                             ) : null}
 
+                                            {item.resultMeta && item.resultMeta.fileName ? (
+                                                <div className="history-meta-line">Asset insert: {item.resultMeta.fileName}</div>
+                                            ) : null}
+
+                                            {item.capturedContext && (item.capturedContext.documentName || item.capturedContext.layerName) ? (
+                                                <div className="history-meta-line">
+                                                    Context gốc: {item.capturedContext.documentName || `Document #${item.capturedContext.documentId}`} / {item.capturedContext.layerName || `Layer #${item.capturedContext.layerId}`}
+                                                </div>
+                                            ) : null}
+
+                                            {item.insert && item.insert.errorCode ? (
+                                                <div className="history-meta-line">Mã lỗi insert: {item.insert.errorCode}</div>
+                                            ) : null}
+
                                             {item.resultAsset && !item.resultAsset.available ? (
                                                 <div className="form-error">
                                                     {item.resultAsset.error || "Asset kết quả cục bộ không còn khả dụng."}

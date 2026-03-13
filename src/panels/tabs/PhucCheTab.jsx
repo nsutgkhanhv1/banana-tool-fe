@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import { buildImagePreviewUrl, capturePhotoshopContext, insertGeneratedImage } from '../../lib/photoshop.js';
+import {
+    buildGeneratedResultState,
+    captureInsertContextSafely,
+    createResultImageRecord,
+    performResultInsert
+} from '../../lib/result-insert.js';
 import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
 
 const TOOL_KEY = 'phucche';
@@ -95,7 +100,6 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     const handledRestoreIdRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
-    const [insertError, setInsertError] = useState('');
     const [historyNotice, setHistoryNotice] = useState('');
     const [size, setSize] = useState('4K');
     const [preset, setPreset] = useState('comprehensive_restore');
@@ -189,7 +193,6 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
             setIsLoading(false);
             setErrorMessage('');
-            setInsertError('');
             setResult(null);
             setCompareView('after');
             setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
@@ -259,7 +262,6 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         }
 
         setErrorMessage('');
-        setInsertError('');
         setHistoryNotice('');
         setIsLoading(true);
 
@@ -267,16 +269,9 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             const payload = createGeneratePayload();
             const sourcePreviewUrl = activeImage ? activeImage.previewUrl : '';
             const sourceDisplayName = activeImage ? activeImage.displayName : '';
-            let insertContext = null;
-            let insertFailureMessage = '';
-
-            try {
-                insertContext = await capturePhotoshopContext();
-            } catch (contextError) {
-                insertFailureMessage = contextError && contextError.message
-                    ? contextError.message
-                    : 'Không thể capture Photoshop context tại thời điểm submit.';
-            }
+            const insertContext = await captureInsertContextSafely({
+                fallbackMessage: 'Không thể capture Photoshop context tại thời điểm submit.'
+            });
 
             const response = await onGenerate(payload);
 
@@ -285,64 +280,40 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                 return;
             }
 
-            const resultMimeType = response.data.mimeType || 'image/png';
-            const previewUrl = buildImagePreviewUrl(response.data.imageBase64, resultMimeType);
-            let insertState = {
-                status: 'pending',
-                insertedLayerId: null,
-                insertedLayerName: '',
-                error: ''
-            };
-
-            if (!insertContext) {
-                setInsertError(insertFailureMessage);
-                insertState = {
-                    status: 'failed',
-                    insertedLayerId: null,
-                    insertedLayerName: '',
-                    error: insertFailureMessage
-                };
-            } else {
-                try {
-                    const insertResult = await insertGeneratedImage({
-                        imageBase64: response.data.imageBase64,
-                        mimeType: resultMimeType,
-                        context: insertContext,
-                        layerNamePrefix: 'Phuc Che'
-                    });
-
-                    insertState = {
-                        status: 'success',
-                        insertedLayerId: insertResult.insertedLayerId,
-                        insertedLayerName: insertResult.insertedLayerName,
-                        error: ''
-                    };
-                } catch (insertFailure) {
-                    const nextInsertError = insertFailure && insertFailure.message
-                        ? insertFailure.message
-                        : 'Generate đã thành công nhưng chèn vào Photoshop thất bại.';
-                    setInsertError(nextInsertError);
-                    insertState = {
-                        status: 'failed',
-                        insertedLayerId: null,
-                        insertedLayerName: '',
-                        error: nextInsertError
-                    };
-                }
-            }
+            const generatedAt = Date.now();
+            const resultImage = createResultImageRecord({
+                imageBase64: response.data.imageBase64,
+                mimeType: response.data.mimeType,
+                featureKey: TOOL_KEY,
+                requestId: response.data.requestId || generatedAt,
+                fileName: `phuc-che-${response.data.requestId || generatedAt}`,
+                displayName: `phuc-che-${response.data.requestId || generatedAt}`,
+                layerNamePrefix: 'Phuc Che'
+            });
+            const insertState = await performResultInsert({
+                resultImage,
+                context: insertContext.context,
+                mode: 'auto',
+                missingContextError: insertContext.error,
+                missingContextErrorCode: insertContext.errorCode,
+                fallbackFailureMessage: 'Generate đã thành công nhưng chèn vào Photoshop thất bại.'
+            });
 
             setCompareView('after');
-            const nextResult = {
-                imageBase64: response.data.imageBase64,
-                mimeType: resultMimeType,
-                previewUrl,
-                sourcePreviewUrl,
-                sourceDisplayName,
-                requestId: response.data.requestId,
-                generatedAt: Date.now(),
-                inputSummary: response.data.inputSummary || null,
-                insert: insertState
-            };
+            const nextResult = buildGeneratedResultState({
+                resultImage,
+                responseData: response.data,
+                featureKey: TOOL_KEY,
+                featureLabel: 'Phục Chế Ảnh',
+                layerNamePrefix: 'Phuc Che',
+                capturedContext: insertContext.context,
+                insert: insertState,
+                generatedAt,
+                extraFields: {
+                    sourcePreviewUrl,
+                    sourceDisplayName
+                }
+            });
 
             setResult(nextResult);
 
@@ -374,15 +345,14 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         `Tô màu: ${payload.colorize ? `Bật${payload.colorTone ? ` (${COLOR_TONE_OPTIONS.find((option) => option.id === payload.colorTone)?.label || payload.colorTone})` : ''}` : 'Tắt'}`
                     ],
                     errorSummary: insertState.error || '',
-                    insert: {
-                        ...insertState,
-                        mode: 'auto',
-                        updatedAt: Date.now()
-                    },
+                    capturedContext: insertContext.context,
+                    insert: insertState,
                     resultImage: {
-                        imageBase64: response.data.imageBase64,
-                        mimeType: resultMimeType,
-                        displayName: `phuc-che-${response.data.requestId || Date.now()}`
+                        imageBase64: resultImage.imageBase64,
+                        mimeType: resultImage.mimeType,
+                        displayName: resultImage.displayName,
+                        fileName: resultImage.fileName,
+                        layerNamePrefix: resultImage.layerNamePrefix
                     },
                     rehydrationPayload: {
                         tabId: TOOL_KEY,
@@ -740,8 +710,8 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                             {result.insert.insertedLayerName ? (
                                 <div className="result-detail">Layer mới: {result.insert.insertedLayerName}</div>
                             ) : null}
-                            {insertError ? (
-                                <div className="result-detail result-detail-error">{insertError}</div>
+                            {result.insert.error ? (
+                                <div className="result-detail result-detail-error">{result.insert.error}</div>
                             ) : null}
                         </div>
                     </div>
