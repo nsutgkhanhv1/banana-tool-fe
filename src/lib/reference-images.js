@@ -34,6 +34,18 @@ const createReferenceImageError = (message, code) => {
     return error;
 };
 
+const normalizeSelectedFile = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    if (Array.isArray(value)) {
+        return value[0] || null;
+    }
+
+    return value;
+};
+
 const serializeReferenceState = (items, activeImageId) => ({
     version: 1,
     updatedAt: Date.now(),
@@ -286,9 +298,9 @@ export const useReferenceImages = ({ toolKey, maxItems, maxFileSizeBytes = DEFAU
 
     const addFromFileEntry = useCallback(async () => {
         const storage = getUxpStorage();
-        const uxpFile = await storage.localFileSystem.getFileForOpening({
+        const uxpFile = normalizeSelectedFile(await storage.localFileSystem.getFileForOpening({
             types: ["png", "jpg", "jpeg", "webp", "avif"]
-        });
+        }));
 
         if (!uxpFile) {
             return null;

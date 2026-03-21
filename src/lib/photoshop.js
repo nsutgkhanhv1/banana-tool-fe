@@ -1,5 +1,6 @@
 const DEFAULT_RESULT_MIME_TYPE = "image/png";
 const SUPPORTED_REFERENCE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+const SUPPORTED_INSERT_MIME_TYPES = ["image/jpeg", "image/png"];
 const REFERENCE_ASSET_MIME_TYPE = "image/png";
 const REFERENCE_ASSET_FOLDER = "reference-images";
 const HISTORY_ASSET_FOLDER = "result-history";
@@ -8,6 +9,11 @@ const createError = (message, code) => {
     const error = new Error(message);
     error.code = code;
     return error;
+};
+
+const appendErrorDetail = (message, error) => {
+    const detail = error && error.message ? ` Chi tiết: ${error.message}` : "";
+    return `${message}${detail}`.trim();
 };
 
 const getPhotoshopModule = () => {
@@ -51,6 +57,18 @@ const toArray = (value) => {
     }
 
     return Array.isArray(value) ? value : Array.from(value);
+};
+
+const normalizeFileSelection = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    if (Array.isArray(value)) {
+        return value[0] || null;
+    }
+
+    return value;
 };
 
 const getActiveLayer = (document) => {
@@ -204,13 +222,36 @@ const guessMimeTypeFromName = (name) => {
     return "image/jpeg";
 };
 
-const readImageDimensions = (previewUrl) => new Promise((resolve, reject) => {
-    const image = new Image();
+const readImageDimensions = (previewUrl, timeoutMs = 1200) => new Promise((resolve) => {
+    let settled = false;
+    let timeoutId = null;
+
+    const finish = (dimensions) => {
+        if (settled) {
+            return;
+        }
+
+        settled = true;
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+        resolve(dimensions);
+    };
+
+    const image = typeof document !== "undefined" && typeof document.createElement === "function"
+        ? document.createElement("img")
+        : new Image();
+    const reject = () => {
+        finish({
+            width: null,
+            height: null
+        });
+    };
 
     image.onload = () => {
-        resolve({
-            width: image.naturalWidth,
-            height: image.naturalHeight
+        finish({
+            width: image.naturalWidth || null,
+            height: image.naturalHeight || null
         });
     };
 
@@ -218,8 +259,75 @@ const readImageDimensions = (previewUrl) => new Promise((resolve, reject) => {
         reject(createError("Không thể đọc kích thước ảnh tham chiếu.", "INVALID_IMAGE_DIMENSIONS"));
     };
 
+    timeoutId = setTimeout(() => {
+        finish({
+            width: null,
+            height: null
+        });
+    }, timeoutMs);
+
     image.src = previewUrl;
 });
+
+const loadImageElement = (previewUrl) => new Promise((resolve, reject) => {
+    if (!previewUrl) {
+        reject(createError("Khong co du lieu anh de xu ly.", "INVALID_RESULT_IMAGE"));
+        return;
+    }
+
+    if (typeof document === "undefined" || typeof document.createElement !== "function") {
+        reject(createError("Moi truong hien tai khong ho tro chuan hoa anh ket qua.", "IMAGE_TRANSCODE_UNAVAILABLE"));
+        return;
+    }
+
+    const image = document.createElement("img");
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(createError("Khong the doc du lieu anh ket qua de chuan hoa.", "IMAGE_TRANSCODE_FAILED"));
+    image.src = previewUrl;
+});
+
+const convertResultImageToPngDataUrl = async (imageBase64, mimeType) => {
+    const previewUrl = buildImagePreviewUrl(imageBase64, mimeType || DEFAULT_RESULT_MIME_TYPE);
+    const image = await loadImageElement(previewUrl);
+    const width = image.naturalWidth || image.width || 0;
+    const height = image.naturalHeight || image.height || 0;
+
+    if (!width || !height) {
+        throw createError("Khong the xac dinh kich thuoc anh ket qua de chuan hoa.", "IMAGE_TRANSCODE_FAILED");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+        throw createError("Khong the tao canvas de chuan hoa anh ket qua.", "IMAGE_TRANSCODE_UNAVAILABLE");
+    }
+
+    context.drawImage(image, 0, 0, width, height);
+    return canvas.toDataURL(DEFAULT_RESULT_MIME_TYPE);
+};
+
+const prepareResultImageAsset = async ({ imageBase64, mimeType }) => {
+    const resolvedMimeType = normalizeResultMimeType(
+        getMimeTypeFromDataUrl(imageBase64, mimeType || DEFAULT_RESULT_MIME_TYPE)
+    );
+
+    if (SUPPORTED_INSERT_MIME_TYPES.includes(resolvedMimeType)) {
+        return {
+            imageBase64: getBase64Payload(imageBase64),
+            mimeType: resolvedMimeType
+        };
+    }
+
+    const normalizedDataUrl = await convertResultImageToPngDataUrl(imageBase64, resolvedMimeType);
+
+    return {
+        imageBase64: getBase64Payload(normalizedDataUrl),
+        mimeType: DEFAULT_RESULT_MIME_TYPE
+    };
+};
 
 export const createPersistentTokenForEntry = async (entry) => {
     const storage = getUxpStorage();
@@ -238,15 +346,20 @@ export const readReferenceImageFromEntry = async (entry, overrides = {}) => {
     const mimeType = overrides.mimeType || guessMimeTypeFromName(overrides.displayName || entry.name || "");
     const imageBase64 = arrayBufferToBase64(binary);
     const previewUrl = buildImagePreviewUrl(imageBase64, mimeType);
-    const dimensions = await readImageDimensions(previewUrl);
+    const dimensions = (typeof overrides.width === "number" && typeof overrides.height === "number")
+        ? {
+            width: overrides.width,
+            height: overrides.height
+        }
+        : await readImageDimensions(previewUrl);
 
     return {
         displayName: overrides.displayName || entry.name || "Reference Image",
         mimeType,
         fileSizeBytes,
         storagePath: overrides.storagePath || entry.nativePath || entry.name || "",
-        width: overrides.width || dimensions.width,
-        height: overrides.height || dimensions.height,
+        width: overrides.width ?? dimensions.width,
+        height: overrides.height ?? dimensions.height,
         imageBase64,
         previewUrl
     };
@@ -287,9 +400,9 @@ const blobToUint8Array = async (blob) => {
 
 export const pickReferenceImageFromDisk = async () => {
     const storage = getUxpStorage();
-    const file = await storage.localFileSystem.getFileForOpening({
+    const file = normalizeFileSelection(await storage.localFileSystem.getFileForOpening({
         types: ["png", "jpg", "jpeg", "webp", "avif"]
-    });
+    }));
 
     if (!file) {
         return null;
@@ -360,20 +473,20 @@ export const writeManagedImageAsset = async ({
     fileNamePrefix = "history-result"
 }) => {
     const storage = getUxpStorage();
-    const normalizedMimeType = normalizeResultMimeType(getMimeTypeFromDataUrl(imageBase64, mimeType || DEFAULT_RESULT_MIME_TYPE));
-    const fileName = buildManagedImageAssetName(fileNamePrefix, normalizedMimeType);
+    const preparedAsset = await prepareResultImageAsset({ imageBase64, mimeType });
+    const fileName = buildManagedImageAssetName(fileNamePrefix, preparedAsset.mimeType);
     const outputEntry = await createManagedImageAssetEntry({
         folderName,
         fileName
     });
 
-    await outputEntry.write(base64ToUint8Array(getBase64Payload(imageBase64)), {
+    await outputEntry.write(base64ToUint8Array(preparedAsset.imageBase64), {
         format: storage.formats.binary
     });
 
     const imageAsset = await readReferenceImageFromEntry(outputEntry, {
         displayName: displayName || fileName,
-        mimeType: normalizedMimeType,
+        mimeType: preparedAsset.mimeType,
         storagePath: outputEntry.nativePath || fileName
     });
 
@@ -406,24 +519,8 @@ export const importReferenceFromQuickLayer = async ({ mode }) => {
     const outputEntry = await createManagedReferenceAssetEntry(
         buildReferenceAssetName(mode === "visible_canvas" ? "visible-canvas" : "current-layer")
     );
-    const canExportViaDuplicateDocument = mode === "visible_canvas"
-        || (mode === "current_layer"
-            && activeLayer
-            && visibleLayers.length === 1
-            && Number(visibleLayers[0].id) === Number(activeLayer.id));
-
     await core.executeAsModal(async () => {
         let exportDocument = null;
-        const exportViaDuplicateDocument = async () => {
-            exportDocument = await sourceDocument.duplicate(
-                buildReferenceAssetName(mode === "visible_canvas" ? "visible-canvas-doc" : "current-layer-doc"),
-                true
-            );
-
-            await exportDocument.saveAs.png(outputEntry, {
-                compression: 6
-            }, true);
-        };
         const exportViaTemporaryDocument = async () => {
             exportDocument = await app.createDocument({
                 width: normalizeDimension(sourceDocument.width) || 1,
@@ -438,7 +535,7 @@ export const importReferenceFromQuickLayer = async ({ mode }) => {
                 await sourceDocument.duplicateLayers(visibleLayers, exportDocument);
                 await exportDocument.mergeVisibleLayers();
             } else {
-                await activeLayer.duplicate(exportDocument);
+                await sourceDocument.duplicateLayers([activeLayer], exportDocument);
             }
 
             await exportDocument.saveAs.png(outputEntry, {
@@ -447,15 +544,7 @@ export const importReferenceFromQuickLayer = async ({ mode }) => {
         };
 
         try {
-            if (canExportViaDuplicateDocument) {
-                try {
-                    await exportViaDuplicateDocument();
-                } catch (duplicateExportError) {
-                    await exportViaTemporaryDocument();
-                }
-            } else {
-                await exportViaTemporaryDocument();
-            }
+            await exportViaTemporaryDocument();
         } catch (error) {
             const detail = error && error.message ? ` ${error.message}` : "";
             throw createError(`Photoshop export Lớp nhanh thất bại.${detail}`.trim(), "QUICK_LAYER_EXPORT_FAILED");
@@ -524,6 +613,7 @@ export const insertGeneratedImage = async ({ imageBase64, mimeType, context, lay
 
     const photoshop = getPhotoshopModule();
     const storage = getUxpStorage();
+    const preparedAsset = await prepareResultImageAsset({ imageBase64, mimeType });
     const documents = toArray(photoshop.app && photoshop.app.documents);
     const targetDocument = documents.find((item) => Number(item.id) === Number(context.documentId));
 
@@ -539,15 +629,14 @@ export const insertGeneratedImage = async ({ imageBase64, mimeType, context, lay
     }
 
     const tempFolder = await storage.localFileSystem.getTemporaryFolder();
-    const normalizedMimeType = normalizeResultMimeType(getMimeTypeFromDataUrl(imageBase64, mimeType || DEFAULT_RESULT_MIME_TYPE));
     let tempFile = null;
 
     try {
         tempFile = await tempFolder.createFile(
-            buildTempInsertFileName(fileName || `${layerNamePrefix || "ai-result"}-${buildUniqueAssetSuffix()}`, normalizedMimeType),
+            buildTempInsertFileName(fileName || `${layerNamePrefix || "ai-result"}-${buildUniqueAssetSuffix()}`, preparedAsset.mimeType),
             { overwrite: true }
         );
-        await tempFile.write(base64ToUint8Array(base64Payload), { format: storage.formats.binary });
+        await tempFile.write(base64ToUint8Array(preparedAsset.imageBase64), { format: storage.formats.binary });
     } catch (error) {
         throw createError("Không thể chuẩn bị file tạm để chèn kết quả vào Photoshop.", "INSERT_FILE_PREP_FAILED");
     }
@@ -591,7 +680,7 @@ export const insertGeneratedImage = async ({ imageBase64, mimeType, context, lay
             );
         } catch (error) {
             const layerLabel = context.layerName ? `Layer "${context.layerName}"` : "Layer gốc";
-            throw createError(`${layerLabel} không còn khả dụng để chèn kết quả.`, "INVALID_INSERT_CONTEXT");
+            throw createError(appendErrorDetail(`${layerLabel} không còn khả dụng để chèn kết quả.`, error), "INVALID_INSERT_CONTEXT");
         }
 
         try {
@@ -636,7 +725,10 @@ export const insertGeneratedImage = async ({ imageBase64, mimeType, context, lay
                 }
             );
         } catch (error) {
-            throw createError("Photoshop không thể place kết quả AI vào document đã capture.", "INSERT_FAILED");
+            throw createError(
+                appendErrorDetail("Photoshop không thể place kết quả AI vào document đã capture.", error),
+                "INSERT_FAILED"
+            );
         }
 
         const insertedLayer = getActiveLayer(photoshop.app.activeDocument);
