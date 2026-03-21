@@ -406,19 +406,14 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
 
                 <div className="flex-row">
                     <button className="btn full-width" onClick={handleAddImage} disabled={actionsDisabled || !canAddMore}>Chọn Ảnh</button>
-                    <button className="btn full-width" onClick={handleQuickLayerToggle} disabled={actionsDisabled || !canAddMore}>Lớp nhanh</button>
+                    <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled || !canAddMore}>Layer hiện tại</button>
                 </div>
 
-                {showQuickLayerOptions ? (
-                    <div className="quick-layer-panel">
-                        <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled}>
-                            Layer hiện tại
-                        </button>
-                        <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.VISIBLE_CANVAS)} disabled={actionsDisabled}>
-                            Toàn bộ canvas đang hiển thị
-                        </button>
-                    </div>
-                ) : null}
+                <div className="quick-layer-inline-actions">
+                    <button className="btn subtle quick-layer-secondary" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.VISIBLE_CANVAS)} disabled={actionsDisabled || !canAddMore}>
+                        Dùng toàn bộ canvas đang hiển thị
+                    </button>
+                </div>
 
                 {restoreNotice ? (
                     <div className="reference-note">{restoreNotice}</div>

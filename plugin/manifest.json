@@ -55,20 +55,20 @@
         "default": "Nano Banana Pro"
       },
       "minimumSize": {
-        "width": 300,
-        "height": 500
+        "width": 420,
+        "height": 620
       },
       "maximumSize": {
         "width": 2000,
         "height": 2000
       },
       "preferredDockedSize": {
-        "width": 350,
-        "height": 800
+        "width": 520,
+        "height": 860
       },
       "preferredFloatingSize": {
-        "width": 350,
-        "height": 800
+        "width": 560,
+        "height": 860
       },
       "icons": [
         {

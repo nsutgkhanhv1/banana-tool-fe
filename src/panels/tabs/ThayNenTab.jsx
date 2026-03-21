@@ -6,6 +6,7 @@ import {
     createResultImageRecord,
     performResultInsert
 } from '../../lib/result-insert.js';
+import { RestorationMaskEditor } from '../../components/RestorationMaskEditor.jsx';
 import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
 
 const TOOL_KEY = 'thaynen';
@@ -40,6 +41,46 @@ const mapSourceTypeToApiSource = (sourceType) => {
     return 'file';
 };
 
+const sanitizeRepairMask = (mask) => {
+    if (!mask || typeof mask !== 'object') {
+        return null;
+    }
+
+    const width = Number(mask.width);
+    const height = Number(mask.height);
+
+    if (!mask.imageBase64 || typeof mask.imageBase64 !== 'string' || !mask.imageBase64.trim()) {
+        return null;
+    }
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        return null;
+    }
+
+    return {
+        imageBase64: mask.imageBase64,
+        mimeType: mask.mimeType || 'image/png',
+        width,
+        height
+    };
+};
+
+const validateRepairMask = (mask) => {
+    if (!mask) {
+        return '';
+    }
+
+    if (!mask.imageBase64 || typeof mask.imageBase64 !== 'string') {
+        return 'Dữ liệu mask chủ thể không hợp lệ.';
+    }
+
+    if (!Number.isFinite(Number(mask.width)) || !Number.isFinite(Number(mask.height))) {
+        return 'Kích thước mask chủ thể không hợp lệ.';
+    }
+
+    return '';
+};
+
 export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecordHistory, historyRestoreRequest }) => {
     const rootRef = useRef(null);
     const handledRestoreIdRef = useRef(null);
@@ -55,6 +96,9 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     const [replacementStrength, setReplacementStrength] = useState('medium');
     const [result, setResult] = useState(null);
     const [showQuickLayerOptions, setShowQuickLayerOptions] = useState(false);
+    const [isQuickLayerImporting, setIsQuickLayerImporting] = useState(false);
+    const [showMaskEditor, setShowMaskEditor] = useState(false);
+    const [repairMask, setRepairMask] = useState(null);
     const {
         items,
         activeImageId,
@@ -92,6 +136,8 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
             try {
                 await addFromClipboard();
+                setRepairMask(null);
+                setShowMaskEditor(false);
                 setErrorMessage('');
                 if (event && typeof event.preventDefault === 'function') {
                     event.preventDefault();
@@ -138,6 +184,9 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             setMatchLighting(typeof payload.matchLighting === 'boolean' ? payload.matchLighting : true);
             setReplacementStrength(payload.replacementStrength || 'medium');
             setShowQuickLayerOptions(false);
+            const restoredRepairMask = sanitizeRepairMask(payload.repairMask);
+            setRepairMask(restoredRepairMask);
+            setShowMaskEditor(Boolean(restoredRepairMask));
 
             const restored = await restoreFromSnapshots({
                 snapshots: payload.referenceImages || [],
@@ -177,6 +226,7 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             keepSubject,
             matchLighting,
             replacementStrength,
+            ...(repairMask ? { repairMask } : {}),
             clientRequestId: `thay-nen-${Date.now()}`,
             appVersion: 'uxp-dev'
         };
@@ -193,6 +243,12 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         setIsLoading(true);
 
         try {
+            const repairMaskError = validateRepairMask(repairMask);
+
+            if (repairMaskError) {
+                throw new Error(repairMaskError);
+            }
+
             const payload = createGeneratePayload();
             const insertContext = await captureInsertContextSafely({
                 fallbackMessage: 'Không thể capture Photoshop context tại thời điểm submit.'
@@ -250,7 +306,8 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         preset: payload.preset,
                         keepSubject: payload.keepSubject,
                         matchLighting: payload.matchLighting,
-                        replacementStrength: payload.replacementStrength
+                        replacementStrength: payload.replacementStrength,
+                        repairMask: payload.repairMask || null
                     },
                     summaryLines: [
                         `Preset: ${BACKGROUND_PRESETS.find((preset) => preset.id === payload.preset)?.label || payload.preset}`,
@@ -258,7 +315,8 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         `Kích thước: ${payload.size}`,
                         `Giữ chủ thể: ${payload.keepSubject ? 'Bật' : 'Tắt'}`,
                         `Khớp ánh sáng: ${payload.matchLighting ? 'Bật' : 'Tắt'}`,
-                        `Độ mạnh thay nền: ${REPLACEMENT_STRENGTH_OPTIONS.find((option) => option.id === payload.replacementStrength)?.label || payload.replacementStrength}`
+                        `Độ mạnh thay nền: ${REPLACEMENT_STRENGTH_OPTIONS.find((option) => option.id === payload.replacementStrength)?.label || payload.replacementStrength}`,
+                        `Mask chủ thể: ${payload.repairMask ? 'Đã chỉnh' : 'Tự động'}`
                     ],
                     errorSummary: insertState.error || '',
                     capturedContext: insertContext.context,
@@ -279,6 +337,7 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         keepSubject: payload.keepSubject,
                         matchLighting: payload.matchLighting,
                         replacementStrength: payload.replacementStrength,
+                        repairMask: payload.repairMask || null,
                         activeImageId,
                         referenceImages: items.map((image) => ({
                             id: image.id,
@@ -313,8 +372,10 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
         try {
             await addFromFileEntry();
+            setRepairMask(null);
+            setShowMaskEditor(false);
         } catch (error) {
-            setErrorMessage(error && error.message ? error.message : 'Không thể đọc ảnh đầu vào từ máy.');
+            setErrorMessage(error && error.message ? error.message : 'KhÃ´ng thá»ƒ Ä‘á»c áº£nh Ä‘áº§u vÃ o tá»« mÃ¡y.');
         }
     };
 
@@ -324,13 +385,22 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             return;
         }
 
+        if (isQuickLayerImporting) {
+            return;
+        }
+
         setErrorMessage('');
+        setIsQuickLayerImporting(true);
 
         try {
             await addFromQuickLayer(mode);
             setShowQuickLayerOptions(false);
+            setRepairMask(null);
+            setShowMaskEditor(false);
         } catch (error) {
-            setErrorMessage(error && error.message ? error.message : 'Không thể lấy ảnh từ Photoshop.');
+            setErrorMessage(error && error.message ? error.message : 'KhÃ´ng thá»ƒ láº¥y áº£nh tá»« Photoshop.');
+        } finally {
+            setIsQuickLayerImporting(false);
         }
     };
 
@@ -357,6 +427,8 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         event.stopPropagation();
         setErrorMessage('');
         removeImage(imageId);
+        setRepairMask(null);
+        setShowMaskEditor(false);
     };
 
     return (
@@ -424,19 +496,14 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
                 <div className="flex-row">
                     <button className="btn full-width" onClick={handleAddImage} disabled={actionsDisabled || !canAddMore}>Chọn Ảnh</button>
-                    <button className="btn full-width" onClick={handleQuickLayerToggle} disabled={actionsDisabled || !canAddMore}>Lớp nhanh</button>
+                    <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled || !canAddMore}>Layer hiện tại</button>
                 </div>
 
-                {showQuickLayerOptions ? (
-                    <div className="quick-layer-panel">
-                        <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled}>
-                            Layer hiện tại
-                        </button>
-                        <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.VISIBLE_CANVAS)} disabled={actionsDisabled}>
-                            Toàn bộ canvas đang hiển thị
-                        </button>
-                    </div>
-                ) : null}
+                <div className="quick-layer-inline-actions">
+                    <button className="btn subtle quick-layer-secondary" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.VISIBLE_CANVAS)} disabled={actionsDisabled || !canAddMore}>
+                        Dùng toàn bộ canvas đang hiển thị
+                    </button>
+                </div>
 
                 {restoreNotice ? (
                     <div className="reference-note">{restoreNotice}</div>
@@ -515,6 +582,40 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         <span className="char-counter">{prompt.length}/500</span>
                     </div>
                 </div>
+            </div>
+
+            <div className="section">
+                <div className="section-header">
+                    <span className="section-label">Mask chủ thể</span>
+                    <button
+                        className="btn"
+                        type="button"
+                        onClick={() => setShowMaskEditor((current) => !current)}
+                        disabled={!activeImage}
+                    >
+                        {showMaskEditor ? 'Ẩn editor' : 'Mở editor'}
+                    </button>
+                </div>
+
+                {activeImage ? (
+                    <>
+                        <div className="face-region-summary">
+                            <span>{repairMask ? 'Đã có mask chỉnh tay cho ảnh hiện tại.' : 'Chưa có mask chỉnh tay nào.'}</span>
+                            <span>Dùng brush để giữ lại chủ thể chính xác hơn trước khi thay nền.</span>
+                        </div>
+
+                        {showMaskEditor ? (
+                            <RestorationMaskEditor
+                                previewUrl={activeImage.previewUrl}
+                                initialMask={repairMask}
+                                onChange={setRepairMask}
+                                disabled={actionsDisabled}
+                            />
+                        ) : null}
+                    </>
+                ) : (
+                    <div className="reference-note">Thêm ảnh đầu vào trước để mở mask editor.</div>
+                )}
             </div>
 
             {errorMessage ? (

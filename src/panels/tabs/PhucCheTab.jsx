@@ -6,10 +6,13 @@ import {
     createResultImageRecord,
     performResultInsert
 } from '../../lib/result-insert.js';
+import { RestorationMaskEditor } from '../../components/RestorationMaskEditor.jsx';
 import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
 
 const TOOL_KEY = 'phucche';
 const MAX_SOURCE_IMAGES = 1;
+const FACE_REGION_MAX_ITEMS = 5;
+const FACE_REGION_MIN_SIZE = 0.04;
 
 const RESTORE_PRESETS = [
     { id: 'comprehensive_restore', label: 'Phục chế toàn diện' },
@@ -94,6 +97,397 @@ const mapSourceTypeToApiSource = (sourceType) => {
     return 'file';
 };
 
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const roundRegionValue = (value) => Math.round(value * 10000) / 10000;
+
+const createFaceRegionId = () => `face-region-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const sanitizeFacePriorityRegions = (regions) => (
+    Array.isArray(regions)
+        ? regions
+            .map((region) => {
+                const rawX = Number(region && region.x);
+                const rawY = Number(region && region.y);
+                const rawWidth = Number(region && region.width);
+                const rawHeight = Number(region && region.height);
+
+                if (![rawX, rawY, rawWidth, rawHeight].every(Number.isFinite)) {
+                    return null;
+                }
+
+                const nextX = clamp(rawX, 0, 1);
+                const nextY = clamp(rawY, 0, 1);
+                const nextWidth = clamp(rawWidth, 0, 1 - nextX);
+                const nextHeight = clamp(rawHeight, 0, 1 - nextY);
+
+                if (nextWidth < FACE_REGION_MIN_SIZE || nextHeight < FACE_REGION_MIN_SIZE) {
+                    return null;
+                }
+
+                return {
+                    id: region && region.id ? String(region.id) : createFaceRegionId(),
+                    x: roundRegionValue(nextX),
+                    y: roundRegionValue(nextY),
+                    width: roundRegionValue(nextWidth),
+                    height: roundRegionValue(nextHeight)
+                };
+            })
+            .filter(Boolean)
+            .slice(0, FACE_REGION_MAX_ITEMS)
+        : []
+);
+
+const validateFacePriorityRegions = (regions) => {
+    if (!Array.isArray(regions)) {
+        return 'Dữ liệu vùng mặt ưu tiên không hợp lệ.';
+    }
+
+    if (regions.length > FACE_REGION_MAX_ITEMS) {
+        return `Chỉ hỗ trợ tối đa ${FACE_REGION_MAX_ITEMS} vùng mặt ưu tiên trong phiên bản hiện tại.`;
+    }
+
+    for (const region of regions) {
+        const x = Number(region && region.x);
+        const y = Number(region && region.y);
+        const width = Number(region && region.width);
+        const height = Number(region && region.height);
+
+        if (![x, y, width, height].every(Number.isFinite)) {
+            return 'Có vùng mặt ưu tiên chứa tọa độ không hợp lệ.';
+        }
+
+        if (x < 0 || y < 0 || width < FACE_REGION_MIN_SIZE || height < FACE_REGION_MIN_SIZE) {
+            return 'Mỗi vùng mặt ưu tiên phải có kích thước đủ lớn để sử dụng.';
+        }
+
+        if (x + width > 1 || y + height > 1) {
+            return 'Vùng mặt ưu tiên phải nằm hoàn toàn trong ảnh xem trước.';
+        }
+    }
+
+    return '';
+};
+
+const resizeFaceRegion = (region, point, handle) => {
+    let left = region.x;
+    let top = region.y;
+    let right = region.x + region.width;
+    let bottom = region.y + region.height;
+
+    if (handle.includes('n')) {
+        top = clamp(point.y, 0, bottom - FACE_REGION_MIN_SIZE);
+    }
+
+    if (handle.includes('s')) {
+        bottom = clamp(point.y, top + FACE_REGION_MIN_SIZE, 1);
+    }
+
+    if (handle.includes('w')) {
+        left = clamp(point.x, 0, right - FACE_REGION_MIN_SIZE);
+    }
+
+    if (handle.includes('e')) {
+        right = clamp(point.x, left + FACE_REGION_MIN_SIZE, 1);
+    }
+
+    return {
+        x: roundRegionValue(left),
+        y: roundRegionValue(top),
+        width: roundRegionValue(right - left),
+        height: roundRegionValue(bottom - top)
+    };
+};
+
+const sanitizeRepairMask = (mask) => {
+    if (!mask || typeof mask !== 'object') {
+        return null;
+    }
+
+    const width = Number(mask.width);
+    const height = Number(mask.height);
+
+    if (!mask.imageBase64 || typeof mask.imageBase64 !== 'string' || !mask.imageBase64.trim()) {
+        return null;
+    }
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        return null;
+    }
+
+    return {
+        imageBase64: mask.imageBase64,
+        mimeType: mask.mimeType || 'image/png',
+        width,
+        height
+    };
+};
+
+const validateRepairMask = (mask) => {
+    if (!mask) {
+        return '';
+    }
+
+    if (!mask.imageBase64 || typeof mask.imageBase64 !== 'string') {
+        return 'Dữ liệu repair mask không hợp lệ.';
+    }
+
+    if (!Number.isFinite(Number(mask.width)) || !Number.isFinite(Number(mask.height))) {
+        return 'Kích thước repair mask không hợp lệ.';
+    }
+
+    return '';
+};
+
+const FaceRegionEditor = ({
+    previewUrl,
+    regions,
+    selectedRegionId,
+    onSelectRegion,
+    onChangeRegions,
+    disabled
+}) => {
+    const overlayRef = useRef(null);
+    const [draftRegion, setDraftRegion] = useState(null);
+    const [draftRegionId, setDraftRegionId] = useState(null);
+    const [dragSession, setDragSession] = useState(null);
+
+    const getNormalizedPoint = (event) => {
+        const bounds = overlayRef.current ? overlayRef.current.getBoundingClientRect() : null;
+
+        if (!bounds || !bounds.width || !bounds.height) {
+            return null;
+        }
+
+        return {
+            x: clamp((event.clientX - bounds.left) / bounds.width, 0, 1),
+            y: clamp((event.clientY - bounds.top) / bounds.height, 0, 1)
+        };
+    };
+
+    useEffect(() => {
+        if (!dragSession) {
+            return undefined;
+        }
+
+        const handleMouseMove = (event) => {
+            const point = getNormalizedPoint(event);
+
+            if (!point) {
+                return;
+            }
+
+            if (dragSession.type === 'draw') {
+                setDraftRegion({
+                    x: Math.min(dragSession.originPoint.x, point.x),
+                    y: Math.min(dragSession.originPoint.y, point.y),
+                    width: Math.abs(point.x - dragSession.originPoint.x),
+                    height: Math.abs(point.y - dragSession.originPoint.y)
+                });
+                return;
+            }
+
+            if (dragSession.type === 'move') {
+                setDraftRegion({
+                    x: roundRegionValue(clamp(dragSession.originRegion.x + (point.x - dragSession.originPoint.x), 0, 1 - dragSession.originRegion.width)),
+                    y: roundRegionValue(clamp(dragSession.originRegion.y + (point.y - dragSession.originPoint.y), 0, 1 - dragSession.originRegion.height)),
+                    width: dragSession.originRegion.width,
+                    height: dragSession.originRegion.height
+                });
+                return;
+            }
+
+            setDraftRegion(resizeFaceRegion(dragSession.originRegion, point, dragSession.handle));
+        };
+
+        const handleMouseUp = () => {
+            if (dragSession.type === 'draw') {
+                if (draftRegion && draftRegion.width >= FACE_REGION_MIN_SIZE && draftRegion.height >= FACE_REGION_MIN_SIZE) {
+                    const nextRegion = {
+                        id: createFaceRegionId(),
+                        x: roundRegionValue(draftRegion.x),
+                        y: roundRegionValue(draftRegion.y),
+                        width: roundRegionValue(draftRegion.width),
+                        height: roundRegionValue(draftRegion.height)
+                    };
+
+                    onChangeRegions([...regions, nextRegion].slice(0, FACE_REGION_MAX_ITEMS));
+                    onSelectRegion(nextRegion.id);
+                }
+            } else if (dragSession.regionId && draftRegion) {
+                onChangeRegions(regions.map((region) => (
+                    region.id === dragSession.regionId
+                        ? {
+                            ...region,
+                            ...draftRegion
+                        }
+                        : region
+                )));
+                onSelectRegion(dragSession.regionId);
+            }
+
+            setDragSession(null);
+            setDraftRegion(null);
+            setDraftRegionId(null);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [dragSession, draftRegion, onChangeRegions, onSelectRegion, regions]);
+
+    const handleCanvasMouseDown = (event) => {
+        if (disabled || regions.length >= FACE_REGION_MAX_ITEMS || event.button !== 0) {
+            return;
+        }
+
+        const point = getNormalizedPoint(event);
+
+        if (!point) {
+            return;
+        }
+
+        setDragSession({
+            type: 'draw',
+            originPoint: point
+        });
+        setDraftRegion({
+            x: point.x,
+            y: point.y,
+            width: 0,
+            height: 0
+        });
+        setDraftRegionId(null);
+        onSelectRegion(null);
+        event.preventDefault();
+    };
+
+    const handleRegionMoveStart = (region, event) => {
+        if (disabled || event.button !== 0) {
+            return;
+        }
+
+        const point = getNormalizedPoint(event);
+
+        if (!point) {
+            return;
+        }
+
+        setDragSession({
+            type: 'move',
+            regionId: region.id,
+            originPoint: point,
+            originRegion: region
+        });
+        setDraftRegion({
+            x: region.x,
+            y: region.y,
+            width: region.width,
+            height: region.height
+        });
+        setDraftRegionId(region.id);
+        onSelectRegion(region.id);
+        event.stopPropagation();
+        event.preventDefault();
+    };
+
+    const handleRegionResizeStart = (region, handle, event) => {
+        if (disabled || event.button !== 0) {
+            return;
+        }
+
+        const point = getNormalizedPoint(event);
+
+        if (!point) {
+            return;
+        }
+
+        setDragSession({
+            type: 'resize',
+            regionId: region.id,
+            handle,
+            originPoint: point,
+            originRegion: region
+        });
+        setDraftRegion({
+            x: region.x,
+            y: region.y,
+            width: region.width,
+            height: region.height
+        });
+        setDraftRegionId(region.id);
+        onSelectRegion(region.id);
+        event.stopPropagation();
+        event.preventDefault();
+    };
+
+    const displayedRegions = regions.map((region) => (
+        draftRegion && draftRegionId === region.id
+            ? {
+                ...region,
+                ...draftRegion
+            }
+            : region
+    ));
+
+    return (
+        <div className="face-region-stage">
+            <img className="face-region-image" src={previewUrl} alt="Face priority preview" />
+            <div
+                ref={overlayRef}
+                className={`face-region-overlay ${disabled ? 'is-disabled' : ''}`}
+                onMouseDown={handleCanvasMouseDown}
+            >
+                {displayedRegions.map((region, index) => (
+                    <div
+                        key={region.id}
+                        className={`face-region-box ${selectedRegionId === region.id ? 'is-selected' : ''}`}
+                        style={{
+                            left: `${region.x * 100}%`,
+                            top: `${region.y * 100}%`,
+                            width: `${region.width * 100}%`,
+                            height: `${region.height * 100}%`
+                        }}
+                        onMouseDown={(event) => handleRegionMoveStart(region, event)}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onSelectRegion(region.id);
+                        }}
+                    >
+                        <span className="face-region-index">{index + 1}</span>
+                        {selectedRegionId === region.id ? (
+                            <>
+                                {['nw', 'ne', 'sw', 'se'].map((handle) => (
+                                    <span
+                                        key={handle}
+                                        className={`face-region-handle face-region-handle-${handle}`}
+                                        onMouseDown={(event) => handleRegionResizeStart(region, handle, event)}
+                                    />
+                                ))}
+                            </>
+                        ) : null}
+                    </div>
+                ))}
+                {draftRegion && !draftRegionId ? (
+                    <div
+                        className="face-region-box is-draft"
+                        style={{
+                            left: `${draftRegion.x * 100}%`,
+                            top: `${draftRegion.y * 100}%`,
+                            width: `${draftRegion.width * 100}%`,
+                            height: `${draftRegion.height * 100}%`
+                        }}
+                    />
+                ) : null}
+            </div>
+        </div>
+    );
+};
+
 export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecordHistory, historyRestoreRequest }) => {
     const defaultPresetProfile = PRESET_PROFILES.comprehensive_restore;
     const rootRef = useRef(null);
@@ -114,6 +508,11 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     const [result, setResult] = useState(null);
     const [showQuickLayerOptions, setShowQuickLayerOptions] = useState(false);
     const [showAdvancedPrompt, setShowAdvancedPrompt] = useState(false);
+    const [showFaceRegionEditor, setShowFaceRegionEditor] = useState(false);
+    const [showMaskEditor, setShowMaskEditor] = useState(false);
+    const [facePriorityRegions, setFacePriorityRegions] = useState([]);
+    const [selectedFaceRegionId, setSelectedFaceRegionId] = useState(null);
+    const [repairMask, setRepairMask] = useState(null);
     const [compareView, setCompareView] = useState('after');
     const {
         items,
@@ -135,6 +534,10 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
     const activeImage = useMemo(() => items.find((image) => image.id === activeImageId) || null, [activeImageId, items]);
     const canSubmit = Boolean(activeImage);
+    const selectedFaceRegion = useMemo(
+        () => facePriorityRegions.find((region) => region.id === selectedFaceRegionId) || null,
+        [facePriorityRegions, selectedFaceRegionId]
+    );
     const comparePreviewUrl = compareView === 'before' && result && result.sourcePreviewUrl
         ? result.sourcePreviewUrl
         : result
@@ -157,6 +560,11 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
             try {
                 await addFromClipboard();
+                setFacePriorityRegions([]);
+                setSelectedFaceRegionId(null);
+                setShowFaceRegionEditor(false);
+                setRepairMask(null);
+                setShowMaskEditor(false);
                 setErrorMessage('');
                 if (event && typeof event.preventDefault === 'function') {
                     event.preventDefault();
@@ -208,6 +616,13 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             setPrompt(payload.prompt || '');
             setShowAdvancedPrompt(Boolean(payload.prompt));
             setShowQuickLayerOptions(false);
+            const restoredFaceRegions = sanitizeFacePriorityRegions(payload.facePriorityRegions);
+            setFacePriorityRegions(restoredFaceRegions);
+            setSelectedFaceRegionId(restoredFaceRegions[0] ? restoredFaceRegions[0].id : null);
+            setShowFaceRegionEditor(restoredFaceRegions.length > 0);
+            const restoredRepairMask = sanitizeRepairMask(payload.repairMask);
+            setRepairMask(restoredRepairMask);
+            setShowMaskEditor(Boolean(restoredRepairMask));
 
             const restored = await restoreFromSnapshots({
                 snapshots: payload.referenceImages || [],
@@ -249,6 +664,15 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             colorize,
             fidelityMode,
             restorationIntensity,
+            ...(facePriorityRegions.length ? {
+                facePriorityRegions: facePriorityRegions.map((region) => ({
+                    x: region.x,
+                    y: region.y,
+                    width: region.width,
+                    height: region.height
+                }))
+            } : {}),
+            ...(repairMask ? { repairMask } : {}),
             ...(colorize ? { colorTone } : {}),
             clientRequestId: `phuc-che-anh-${Date.now()}`,
             appVersion: 'uxp-dev'
@@ -266,6 +690,17 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         setIsLoading(true);
 
         try {
+            const faceRegionError = validateFacePriorityRegions(facePriorityRegions);
+            const repairMaskError = validateRepairMask(repairMask);
+
+            if (faceRegionError) {
+                throw new Error(faceRegionError);
+            }
+
+            if (repairMaskError) {
+                throw new Error(repairMaskError);
+            }
+
             const payload = createGeneratePayload();
             const sourcePreviewUrl = activeImage ? activeImage.previewUrl : '';
             const sourceDisplayName = activeImage ? activeImage.displayName : '';
@@ -334,12 +769,15 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         colorize: payload.colorize,
                         fidelityMode: payload.fidelityMode,
                         restorationIntensity: payload.restorationIntensity,
-                        colorTone: payload.colorTone || null
+                        colorTone: payload.colorTone || null,
+                        facePriorityRegions: payload.facePriorityRegions || [],
+                        repairMask: payload.repairMask || null
                     },
                     summaryLines: [
                         `Preset: ${RESTORE_PRESETS.find((option) => option.id === payload.preset)?.label || payload.preset}`,
                         `Mode: ${RESTORE_MODES.find((option) => option.id === payload.mode)?.label || payload.mode}`,
                         `Kích thước: ${payload.size}`,
+                        `Vùng mặt ưu tiên: ${payload.facePriorityRegions && payload.facePriorityRegions.length ? `${payload.facePriorityRegions.length} vùng` : 'Auto'}`,
                         `Khôi phục mặt: ${payload.enhanceFace ? 'Bật' : 'Tắt'}`,
                         `Khử nhiễu: ${payload.denoise ? 'Bật' : 'Tắt'}`,
                         `Tô màu: ${payload.colorize ? `Bật${payload.colorTone ? ` (${COLOR_TONE_OPTIONS.find((option) => option.id === payload.colorTone)?.label || payload.colorTone})` : ''}` : 'Tắt'}`
@@ -366,6 +804,8 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         fidelityMode: payload.fidelityMode,
                         restorationIntensity: payload.restorationIntensity,
                         colorTone: payload.colorTone || '',
+                        facePriorityRegions: payload.facePriorityRegions || [],
+                        repairMask: payload.repairMask || null,
                         activeImageId,
                         referenceImages: items.map((image) => ({
                             id: image.id,
@@ -400,6 +840,11 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
         try {
             await addFromFileEntry();
+            setFacePriorityRegions([]);
+            setSelectedFaceRegionId(null);
+            setShowFaceRegionEditor(false);
+            setRepairMask(null);
+            setShowMaskEditor(false);
         } catch (error) {
             setErrorMessage(error && error.message ? error.message : 'Không thể đọc ảnh đầu vào từ máy.');
         }
@@ -416,6 +861,11 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         try {
             await addFromQuickLayer(quickLayerMode);
             setShowQuickLayerOptions(false);
+            setFacePriorityRegions([]);
+            setSelectedFaceRegionId(null);
+            setShowFaceRegionEditor(false);
+            setRepairMask(null);
+            setShowMaskEditor(false);
         } catch (error) {
             setErrorMessage(error && error.message ? error.message : 'Không thể lấy ảnh từ Photoshop.');
         }
@@ -439,6 +889,26 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         event.stopPropagation();
         setErrorMessage('');
         removeImage(imageId);
+        setFacePriorityRegions([]);
+        setSelectedFaceRegionId(null);
+        setShowFaceRegionEditor(false);
+        setRepairMask(null);
+        setShowMaskEditor(false);
+    };
+
+    const handleDeleteSelectedFaceRegion = () => {
+        if (!selectedFaceRegion) {
+            return;
+        }
+
+        const nextRegions = facePriorityRegions.filter((region) => region.id !== selectedFaceRegion.id);
+        setFacePriorityRegions(nextRegions);
+        setSelectedFaceRegionId(nextRegions[0] ? nextRegions[0].id : null);
+    };
+
+    const handleResetFaceRegions = () => {
+        setFacePriorityRegions([]);
+        setSelectedFaceRegionId(null);
     };
 
     const handlePresetChange = (nextPreset) => {
@@ -512,19 +982,14 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
                 <div className="flex-row">
                     <button className="btn full-width" onClick={handleAddImage} disabled={actionsDisabled || !canAddMore}>Chọn Ảnh</button>
-                    <button className="btn full-width" onClick={handleQuickLayerToggle} disabled={actionsDisabled || !canAddMore}>Lớp nhanh</button>
+                    <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled || !canAddMore}>Layer hiện tại</button>
                 </div>
 
-                {showQuickLayerOptions ? (
-                    <div className="quick-layer-panel">
-                        <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled}>
-                            Layer hiện tại
-                        </button>
-                        <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.VISIBLE_CANVAS)} disabled={actionsDisabled}>
-                            Toàn bộ canvas đang hiển thị
-                        </button>
-                    </div>
-                ) : null}
+                <div className="quick-layer-inline-actions">
+                    <button className="btn subtle quick-layer-secondary" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.VISIBLE_CANVAS)} disabled={actionsDisabled || !canAddMore}>
+                        Dùng toàn bộ canvas đang hiển thị
+                    </button>
+                </div>
 
                 {restoreNotice ? (
                     <div className="reference-note">{restoreNotice}</div>
@@ -653,6 +1118,114 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                 )}
             </div>
 
+            <div className="section">
+                <div className="section-header">
+                    <span className="section-label">Vùng ưu tiên khuôn mặt</span>
+                    <button
+                        className="btn"
+                        type="button"
+                        onClick={() => setShowFaceRegionEditor((current) => !current)}
+                        disabled={!activeImage}
+                    >
+                        {showFaceRegionEditor ? 'Ẩn editor' : 'Mở editor'}
+                    </button>
+                </div>
+
+                {activeImage ? (
+                    <>
+                        <div className="face-region-summary">
+                            <span>{facePriorityRegions.length === 0 ? 'Chưa có vùng ưu tiên nào.' : `Đã chọn ${facePriorityRegions.length}/${FACE_REGION_MAX_ITEMS} vùng ưu tiên.`}</span>
+                            <span>Kéo trực tiếp trên preview để thêm vùng.</span>
+                        </div>
+
+                        {showFaceRegionEditor ? (
+                            <>
+                                <FaceRegionEditor
+                                    previewUrl={activeImage.previewUrl}
+                                    regions={facePriorityRegions}
+                                    selectedRegionId={selectedFaceRegionId}
+                                    onSelectRegion={setSelectedFaceRegionId}
+                                    onChangeRegions={setFacePriorityRegions}
+                                    disabled={actionsDisabled}
+                                />
+                                <div className="face-region-toolbar">
+                                    <button
+                                        className="btn"
+                                        type="button"
+                                        onClick={handleDeleteSelectedFaceRegion}
+                                        disabled={!selectedFaceRegion}
+                                    >
+                                        Xóa vùng đang chọn
+                                    </button>
+                                    <button
+                                        className="btn"
+                                        type="button"
+                                        onClick={handleResetFaceRegions}
+                                        disabled={facePriorityRegions.length === 0}
+                                    >
+                                        Reset vùng mặt
+                                    </button>
+                                </div>
+                            </>
+                        ) : null}
+
+                        {facePriorityRegions.length > 0 ? (
+                            <div className="face-region-chip-list">
+                                {facePriorityRegions.map((region, index) => (
+                                    <button
+                                        key={region.id}
+                                        className={`face-region-chip ${selectedFaceRegionId === region.id ? 'is-active' : ''}`}
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedFaceRegionId(region.id);
+                                            setShowFaceRegionEditor(true);
+                                        }}
+                                    >
+                                        {`Vùng ${index + 1}`}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
+                    </>
+                ) : (
+                    <div className="reference-note">Thêm ảnh đầu vào trước để mở editor vùng khuôn mặt.</div>
+                )}
+            </div>
+
+            <div className="section">
+                <div className="section-header">
+                    <span className="section-label">Mask vùng hư hại</span>
+                    <button
+                        className="btn"
+                        type="button"
+                        onClick={() => setShowMaskEditor((current) => !current)}
+                        disabled={!activeImage}
+                    >
+                        {showMaskEditor ? 'Ẩn editor' : 'Mở editor'}
+                    </button>
+                </div>
+
+                {activeImage ? (
+                    <>
+                        <div className="face-region-summary">
+                            <span>{repairMask ? 'Đã có repair mask cho ảnh hiện tại.' : 'Chưa có repair mask nào.'}</span>
+                            <span>Dùng brush để tô vùng cần phục chế mạnh hơn, chuyển sang xóa khi cần chỉnh lại.</span>
+                        </div>
+
+                        {showMaskEditor ? (
+                            <RestorationMaskEditor
+                                previewUrl={activeImage.previewUrl}
+                                initialMask={repairMask}
+                                onChange={setRepairMask}
+                                disabled={actionsDisabled}
+                            />
+                        ) : null}
+                    </>
+                ) : (
+                    <div className="reference-note">Thêm ảnh đầu vào trước để mở mask editor.</div>
+                )}
+            </div>
+
             {errorMessage ? (
                 <div className="section">
                     <div className="status-banner status-banner-error">{errorMessage}</div>
@@ -720,7 +1293,7 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
             <div className="section">
                 <div className="reference-note">
-                    Mask editor, face region và history chưa được mở trong slice này. Fallback hiện tại là dùng preset, mode và toggle để chạy end-to-end an toàn.
+                    Face region và mask editor hiện đều hỗ trợ editor cơ bản trên preview ảnh. History hiện hỗ trợ lưu kết quả, reinsert và nạp lại cấu hình cơ bản.
                 </div>
             </div>
 

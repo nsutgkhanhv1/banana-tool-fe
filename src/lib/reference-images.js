@@ -287,7 +287,7 @@ export const useReferenceImages = ({ toolKey, maxItems, maxFileSizeBytes = DEFAU
     const addFromFileEntry = useCallback(async () => {
         const storage = getUxpStorage();
         const uxpFile = await storage.localFileSystem.getFileForOpening({
-            types: ["png", "jpg", "jpeg", "webp"]
+            types: ["png", "jpg", "jpeg", "webp", "avif"]
         });
 
         if (!uxpFile) {

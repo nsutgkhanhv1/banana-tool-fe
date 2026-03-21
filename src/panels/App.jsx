@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "../components/Header.jsx";
 import { TabNavigation } from "../components/TabNavigation.jsx";
 import { ShellModalHost } from "../components/ShellModalHost.jsx";
@@ -146,6 +146,11 @@ export const App = () => {
         email: "",
         notice: ""
     });
+    const entitlementRef = useRef(null);
+
+    useEffect(() => {
+        entitlementRef.current = entitlement;
+    }, [entitlement]);
 
     const historyNamespace = useMemo(() => {
         return resolveHistoryNamespace(userProfile);
@@ -253,11 +258,11 @@ export const App = () => {
             const message = error && error.message ? error.message : "Không thể cập nhật trạng thái mới nhất.";
             setEntitlementSyncError(message);
             return {
-                entitlement: config.preserveExisting ? entitlement : null,
+                entitlement: config.preserveExisting ? entitlementRef.current : null,
                 error
             };
         }
-    }, [entitlement, handleSessionChange]);
+    }, [handleSessionChange]);
 
     const loadShellData = useCallback(async (sessionValue, options) => {
         const config = options || {};
@@ -1179,7 +1184,7 @@ export const App = () => {
     }
 
     return (
-        <div className="app-container">
+        <div className={`app-container ${activeModal ? "has-modal" : ""}`}>
             <Header
                 userSummary={currentUser}
                 planSummary={currentPlan}

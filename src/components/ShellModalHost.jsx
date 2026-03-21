@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { formatPriceVnd, getPurchasePackagePrimaryValue } from "../lib/purchase.js";
 
-const ModalFrame = ({ title, subtitle, onClose, canClose, children }) => (
-    <div className="modal-backdrop">
-        <div className="modal-card">
+const ModalFrame = ({ title, subtitle, onClose, canClose, children, backdropClassName = "", cardClassName = "", bodyClassName = "" }) => (
+    <div className={`modal-backdrop ${backdropClassName}`.trim()}>
+        <div className={`modal-card ${cardClassName}`.trim()}>
             <div className="modal-header">
                 <div>
                     <h2>{title}</h2>
@@ -18,7 +18,7 @@ const ModalFrame = ({ title, subtitle, onClose, canClose, children }) => (
                     </button>
                 ) : null}
             </div>
-            <div className="modal-body">{children}</div>
+            <div className={`modal-body ${bodyClassName}`.trim()}>{children}</div>
         </div>
     </div>
 );
@@ -368,6 +368,9 @@ const AuthModal = ({ config, authActions, onClose }) => {
             subtitle={subtitleMap[view]}
             onClose={onClose}
             canClose={true}
+            backdropClassName="auth-modal-backdrop"
+            cardClassName="auth-modal-card"
+            bodyClassName="auth-modal-body"
         >
             <div className="modal-stack">
                 {notice ? <div className="info-banner">{notice}</div> : null}

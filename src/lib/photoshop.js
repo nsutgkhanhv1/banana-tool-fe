@@ -1,5 +1,5 @@
 const DEFAULT_RESULT_MIME_TYPE = "image/png";
-const SUPPORTED_REFERENCE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const SUPPORTED_REFERENCE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const REFERENCE_ASSET_MIME_TYPE = "image/png";
 const REFERENCE_ASSET_FOLDER = "reference-images";
 const HISTORY_ASSET_FOLDER = "result-history";
@@ -127,6 +127,10 @@ const getFileExtensionFromMimeType = (mimeType) => {
         return "webp";
     }
 
+    if (mimeType === "image/avif") {
+        return "avif";
+    }
+
     return "jpg";
 };
 
@@ -191,6 +195,10 @@ const guessMimeTypeFromName = (name) => {
 
     if (lowerName.endsWith(".webp")) {
         return "image/webp";
+    }
+
+    if (lowerName.endsWith(".avif")) {
+        return "image/avif";
     }
 
     return "image/jpeg";
@@ -280,7 +288,7 @@ const blobToUint8Array = async (blob) => {
 export const pickReferenceImageFromDisk = async () => {
     const storage = getUxpStorage();
     const file = await storage.localFileSystem.getFileForOpening({
-        types: ["png", "jpg", "jpeg", "webp"]
+        types: ["png", "jpg", "jpeg", "webp", "avif"]
     });
 
     if (!file) {
@@ -290,7 +298,13 @@ export const pickReferenceImageFromDisk = async () => {
     const binary = await file.read({ format: storage.formats.binary });
     const imageBase64 = arrayBufferToBase64(binary);
     const lowerName = file.name ? file.name.toLowerCase() : "";
-    const mimeType = lowerName.endsWith(".png") ? "image/png" : lowerName.endsWith(".webp") ? "image/webp" : "image/jpeg";
+    const mimeType = lowerName.endsWith(".png")
+        ? "image/png"
+        : lowerName.endsWith(".webp")
+            ? "image/webp"
+            : lowerName.endsWith(".avif")
+                ? "image/avif"
+                : "image/jpeg";
 
     return {
         id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -392,37 +406,80 @@ export const importReferenceFromQuickLayer = async ({ mode }) => {
     const outputEntry = await createManagedReferenceAssetEntry(
         buildReferenceAssetName(mode === "visible_canvas" ? "visible-canvas" : "current-layer")
     );
+    const canExportViaDuplicateDocument = mode === "visible_canvas"
+        || (mode === "current_layer"
+            && activeLayer
+            && visibleLayers.length === 1
+            && Number(visibleLayers[0].id) === Number(activeLayer.id));
 
     await core.executeAsModal(async () => {
-        const exportDocument = await app.createDocument({
-            width: normalizeDimension(sourceDocument.width) || 1,
-            height: normalizeDimension(sourceDocument.height) || 1,
-            resolution: sourceDocument.resolution || 72,
-            fill: constants.DocumentFill.TRANSPARENT,
-            mode: constants.NewDocumentMode.RGB,
-            profile: "sRGB IEC61966-2.1"
-        });
+        let exportDocument = null;
+        const exportViaDuplicateDocument = async () => {
+            exportDocument = await sourceDocument.duplicate(
+                buildReferenceAssetName(mode === "visible_canvas" ? "visible-canvas-doc" : "current-layer-doc"),
+                true
+            );
 
-        try {
+            await exportDocument.saveAs.png(outputEntry, {
+                compression: 6
+            }, true);
+        };
+        const exportViaTemporaryDocument = async () => {
+            exportDocument = await app.createDocument({
+                width: normalizeDimension(sourceDocument.width) || 1,
+                height: normalizeDimension(sourceDocument.height) || 1,
+                resolution: sourceDocument.resolution || 72,
+                fill: constants.DocumentFill.TRANSPARENT,
+                mode: constants.NewDocumentMode.RGB,
+                profile: "sRGB IEC61966-2.1"
+            });
+
             if (mode === "visible_canvas") {
                 await sourceDocument.duplicateLayers(visibleLayers, exportDocument);
                 await exportDocument.mergeVisibleLayers();
             } else {
-                await sourceDocument.duplicateLayers([activeLayer], exportDocument);
+                await activeLayer.duplicate(exportDocument);
             }
 
             await exportDocument.saveAs.png(outputEntry, {
                 compression: 6
             }, true);
+        };
+
+        try {
+            if (canExportViaDuplicateDocument) {
+                try {
+                    await exportViaDuplicateDocument();
+                } catch (duplicateExportError) {
+                    await exportViaTemporaryDocument();
+                }
+            } else {
+                await exportViaTemporaryDocument();
+            }
         } catch (error) {
-            throw createError("Photoshop export Lớp nhanh thất bại.", "QUICK_LAYER_EXPORT_FAILED");
+            const detail = error && error.message ? ` ${error.message}` : "";
+            throw createError(`Photoshop export Lớp nhanh thất bại.${detail}`.trim(), "QUICK_LAYER_EXPORT_FAILED");
         } finally {
-            await exportDocument.close(constants.SaveDialogOptions.DONOTSAVECHANGES);
+            if (exportDocument) {
+                try {
+                    app.activeDocument = exportDocument;
+                    await exportDocument.close(constants.SaveDialogOptions.DONOTSAVECHANGES);
+                } catch (closeError) {
+                    // Ignore cleanup errors so we can still restore focus to the source document.
+                }
+            }
             app.activeDocument = sourceDocument;
         }
     }, {
         commandName: "Export Quick Layer Reference"
     });
+
+    const storage = getUxpStorage();
+    const exportedBinary = await outputEntry.read({ format: storage.formats.binary });
+    const exportedSize = exportedBinary.byteLength ?? exportedBinary.length ?? 0;
+    if (!exportedSize) {
+        throw createError("Photoshop khong xuat duoc du lieu anh tu layer hien tai.", "QUICK_LAYER_EXPORT_EMPTY");
+    }
 
     return {
         entry: outputEntry,
