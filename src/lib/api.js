@@ -55,6 +55,14 @@ export const requestJson = async (path, init = {}, session, onSessionRefresh, op
                 accessToken: refreshBody.data.accessToken,
                 refreshToken: refreshBody.data.refreshToken
             };
+
+            // Keep the in-flight session object aligned with rotated tokens so
+            // follow-up requests in the same async flow do not reuse a revoked refresh token.
+            if (session) {
+                session.accessToken = nextSession.accessToken;
+                session.refreshToken = nextSession.refreshToken;
+            }
+
             onSessionRefresh(nextSession);
             response = await makeRequest(nextSession.accessToken);
         } else {

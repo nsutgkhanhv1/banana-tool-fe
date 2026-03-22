@@ -601,18 +601,11 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                 <div className="section-header">
                     <span className="section-label">Độ mạnh thay nền</span>
                 </div>
-                <div className="segmented-control">
+                <select className="dropdown" value={replacementStrength} onChange={(event) => setReplacementStrength(event.target.value)}>
                     {REPLACEMENT_STRENGTH_OPTIONS.map((option) => (
-                        <button
-                            key={option.id}
-                            className={`segment-btn ${replacementStrength === option.id ? 'active' : ''}`}
-                            onClick={() => setReplacementStrength(option.id)}
-                            type="button"
-                        >
-                            {option.label}
-                        </button>
+                        <option key={option.id} value={option.id}>{option.label}</option>
                     ))}
-                </div>
+                </select>
             </div>
 
             <div className="section">

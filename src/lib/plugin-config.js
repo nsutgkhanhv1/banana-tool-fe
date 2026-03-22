@@ -2,8 +2,8 @@ import manifest from "../../plugin/manifest.json";
 
 import { API_BASE_URL } from "./api.js";
 
-export const PLUGIN_DISPLAY_NAME = "Nano Banana Pro";
-export const PLUGIN_SUPPORT_CONTACT = "support@banana-tool.vn";
+export const PLUGIN_DISPLAY_NAME = "Meko Media AI";
+export const PLUGIN_SUPPORT_CONTACT = "[EMAIL_ADDRESS]";
 export const PLUGIN_SUPPORT_LINK = `mailto:${PLUGIN_SUPPORT_CONTACT}`;
 
 export const getPluginVersion = () => {

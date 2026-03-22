@@ -1098,34 +1098,20 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                 <div className="section-header">
                     <span className="section-label">Mức can thiệp</span>
                 </div>
-                <div className="segmented-control">
+                <select className="dropdown" value={fidelityMode} onChange={(event) => setFidelityMode(event.target.value)}>
                     {FIDELITY_OPTIONS.map((option) => (
-                        <button
-                            key={option.id}
-                            className={`segment-btn ${fidelityMode === option.id ? 'active' : ''}`}
-                            onClick={() => setFidelityMode(option.id)}
-                            type="button"
-                        >
-                            {option.label}
-                        </button>
+                        <option key={option.id} value={option.id}>{option.label}</option>
                     ))}
-                </div>
+                </select>
 
                 <div className="section-header" style={{marginTop: '12px'}}>
                     <span className="section-label">Mức phục chế</span>
                 </div>
-                <div className="segmented-control">
+                <select className="dropdown" value={restorationIntensity} onChange={(event) => setRestorationIntensity(event.target.value)}>
                     {INTENSITY_OPTIONS.map((option) => (
-                        <button
-                            key={option.id}
-                            className={`segment-btn ${restorationIntensity === option.id ? 'active' : ''}`}
-                            onClick={() => setRestorationIntensity(option.id)}
-                            type="button"
-                        >
-                            {option.label}
-                        </button>
+                        <option key={option.id} value={option.id}>{option.label}</option>
                     ))}
-                </div>
+                </select>
 
                 {colorize ? (
                     <>

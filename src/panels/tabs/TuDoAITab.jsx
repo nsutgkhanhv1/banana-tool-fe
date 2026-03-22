@@ -503,22 +503,20 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
                 <div className="section-header">
                     <span className="section-label">Mức bám input</span>
                 </div>
-                <div className="segmented-control">
+                <select className="dropdown" value={creativity} onChange={(event) => setCreativity(event.target.value)}>
                     {[
                         { id: 'creative', label: 'Sáng tạo' },
                         { id: 'balanced', label: 'Cân bằng' },
                         { id: 'faithful', label: 'Bám sát' }
                     ].map((option) => (
-                        <button
+                        <option
                             key={option.id}
-                            className={`segment-btn ${creativity === option.id ? 'active' : ''}`}
-                            onClick={() => setCreativity(option.id)}
-                            type="button"
+                            value={option.id}
                         >
                             {option.label}
-                        </button>
+                        </option>
                     ))}
-                </div>
+                </select>
             </div>
 
             {errorMessage ? (

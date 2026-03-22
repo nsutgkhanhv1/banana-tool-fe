@@ -52,10 +52,10 @@
       "type": "panel",
       "id": "demos",
       "label": {
-        "default": "Nano Banana Pro"
+        "default": "Meko Media AI"
       },
       "minimumSize": {
-        "width": 420,
+        "width": 460,
         "height": 620
       },
       "maximumSize": {
@@ -63,11 +63,11 @@
         "height": 2000
       },
       "preferredDockedSize": {
-        "width": 520,
+        "width": 580,
         "height": 860
       },
       "preferredFloatingSize": {
-        "width": 560,
+        "width": 620,
         "height": 860
       },
       "icons": [

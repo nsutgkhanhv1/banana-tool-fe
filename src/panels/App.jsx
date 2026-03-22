@@ -401,8 +401,7 @@ export const App = () => {
 
         try {
             const result = await loadShellData(session, {
-                preserveEntitlement: true,
-                disableSessionRefresh: true
+                preserveEntitlement: true
             });
             const historyResult = await refreshHistory(result.profile);
 

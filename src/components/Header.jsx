@@ -54,7 +54,6 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
                 </div>
                 <div className="brand-copy">
                     <span className="brand-title">{PLUGIN_DISPLAY_NAME}</span>
-                    <span className="brand-subtitle">Plugin shell & điều hướng</span>
                 </div>
             </div>
 
@@ -65,10 +64,6 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
                     title="Xem Credit & Subscription"
                     disabled={actionsDisabled}
                 >
-                    <div className={`plan-pill plan-tone-${planSummary.tone || "default"}`}>
-                        <span>{planSummary.shortName || planSummary.name}</span>
-                    </div>
-
                     <div className="credit-pill">
                         <span className="credit-pill-label">Credit:</span>
                         <span className="credit-pill-value">{creditSummary.usageText}</span>
