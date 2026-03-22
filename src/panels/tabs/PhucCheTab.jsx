@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
     buildGeneratedResultState,
-    captureInsertContextSafely,
+    captureDocumentInsertContextSafely,
     createResultImageRecord,
     performResultInsert
 } from '../../lib/result-insert.js';
@@ -506,6 +506,7 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     const [colorTone, setColorTone] = useState(defaultPresetProfile.colorTone);
     const [prompt, setPrompt] = useState('');
     const [result, setResult] = useState(null);
+    const [isManualInsertLoading, setIsManualInsertLoading] = useState(false);
     const [showQuickLayerOptions, setShowQuickLayerOptions] = useState(false);
     const [showAdvancedPrompt, setShowAdvancedPrompt] = useState(false);
     const [showFaceRegionEditor, setShowFaceRegionEditor] = useState(false);
@@ -704,7 +705,7 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             const payload = createGeneratePayload();
             const sourcePreviewUrl = activeImage ? activeImage.previewUrl : '';
             const sourceDisplayName = activeImage ? activeImage.displayName : '';
-            const insertContext = await captureInsertContextSafely({
+            const insertContext = await captureDocumentInsertContextSafely({
                 fallbackMessage: 'Không thể capture Photoshop context tại thời điểm submit.'
             });
 
@@ -826,6 +827,54 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             setErrorMessage(error && error.message ? error.message : 'Không thể chuẩn bị request Phục Chế Ảnh.');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleManualInsert = async () => {
+        if (!result || isManualInsertLoading) {
+            return;
+        }
+
+        setErrorMessage('');
+        setHistoryNotice('');
+        setIsManualInsertLoading(true);
+
+        try {
+            const insertContext = await captureDocumentInsertContextSafely({
+                fallbackMessage: 'Không có document Photoshop đang mở để chèn thủ công.'
+            });
+            const insertState = await performResultInsert({
+                resultImage: {
+                    imageBase64: result.imageBase64,
+                    mimeType: result.mimeType,
+                    fileName: result.filename,
+                    displayName: result.displayName,
+                    layerNamePrefix: result.layerNamePrefix || 'Phuc Che'
+                },
+                context: insertContext.context,
+                mode: 'manual',
+                missingContextError: insertContext.error,
+                missingContextErrorCode: insertContext.errorCode,
+                fallbackFailureMessage: 'Không thể chèn thủ công vào Photoshop.'
+            });
+
+            setResult((current) => {
+                if (!current) {
+                    return current;
+                }
+
+                return {
+                    ...current,
+                    capturedContext: insertContext.context || current.capturedContext,
+                    insert: insertState
+                };
+            });
+
+            if (insertState.status === 'success') {
+                setHistoryNotice('Đã chèn thủ công ảnh vào Photoshop dưới dạng layer mới trong document hiện tại.');
+            }
+        } finally {
+            setIsManualInsertLoading(false);
         }
     };
 
@@ -1281,10 +1330,26 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                                 </div>
                             ) : null}
                             {result.insert.insertedLayerName ? (
-                                <div className="result-detail">Layer mới: {result.insert.insertedLayerName}</div>
+                                <div className="result-detail">Layer m?i: {result.insert.insertedLayerName}</div>
                             ) : null}
                             {result.insert.error ? (
                                 <div className="result-detail result-detail-error">{result.insert.error}</div>
+                            ) : null}
+                            {result.insert.status !== 'success' ? (
+                                <>
+                                    <button
+                                        className="btn"
+                                        style={{ width: '100%' }}
+                                        onClick={handleManualInsert}
+                                        disabled={isLoading || isManualInsertLoading}
+                                    >
+                                        {isManualInsertLoading ? '?ang ch?n th? c?ng...' : 'Ch?n th? c?ng'}
+                                    </button>
+                                    <div className="result-detail">
+                                        ??ng m?i h?p tho?i ho?c ch? ?? ch?nh s?a trong Photoshop r?i b?m Ch?n th? c?ng.
+                                        ?nh s? ???c th?m th?nh layer m?i trong document hi?n t?i.
+                                    </div>
+                                </>
                             ) : null}
                         </div>
                     </div>

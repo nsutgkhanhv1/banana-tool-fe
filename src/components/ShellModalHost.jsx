@@ -1,6 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { formatPriceVnd, getPurchasePackagePrimaryValue } from "../lib/purchase.js";
 
+const CloseButton = ({ onClick, title = "Đóng" }) => (
+    <button type="button" className="btn modal-close" onClick={onClick} title={title}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+        <span>Đóng</span>
+    </button>
+);
+
 const ModalFrame = ({ title, subtitle, onClose, canClose, children, backdropClassName = "", cardClassName = "", bodyClassName = "" }) => (
     <div className={`modal-backdrop ${backdropClassName}`.trim()}>
         <div className={`modal-card ${cardClassName}`.trim()}>
@@ -10,12 +20,7 @@ const ModalFrame = ({ title, subtitle, onClose, canClose, children, backdropClas
                     {subtitle ? <p>{subtitle}</p> : null}
                 </div>
                 {canClose ? (
-                    <button className="btn icon-only modal-close" onClick={onClose} title="Đóng">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                    </button>
+                    <CloseButton onClick={onClose} />
                 ) : null}
             </div>
             <div className={`modal-body ${bodyClassName}`.trim()}>{children}</div>
@@ -782,12 +787,7 @@ const HistoryModal = ({
                     <div className="history-preview-dialog" onClick={(event) => event.stopPropagation()}>
                         <div className="history-detail-header">
                             <span className="pill-tag">{previewItem.featureLabel}</span>
-                            <button className="btn icon-only modal-close" onClick={() => setPreviewItemId(null)} title="Đóng preview">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                                </svg>
-                            </button>
+                            <CloseButton onClick={() => setPreviewItemId(null)} title="Đóng preview" />
                         </div>
                         <img className="history-preview-dialog-image" src={previewItem.previewUrl} alt={`Preview lớn ${previewItem.featureLabel}`} />
                     </div>
@@ -933,6 +933,8 @@ const PurchaseModal = ({ userProfile, purchaseGateway, onClose, onOpenCreditSubs
             ? 2
             : 1;
     const filteredPackages = packages.filter((item) => item.purchaseType === selectedType);
+    const creditPackages = packages.filter((item) => item.purchaseType === "credit");
+    const subscriptionPackages = packages.filter((item) => item.purchaseType === "subscription");
     const currentPackage = currentOrder ? currentOrder.packageSnapshot : null;
     const currentStatusLabel = currentOrder ? (PURCHASE_STATUS_LABELS[currentOrder.status] || currentOrder.status) : "";
     const expiresInLabel = currentOrder && currentOrder.status === "draft"
@@ -1073,20 +1075,72 @@ const PurchaseModal = ({ userProfile, purchaseGateway, onClose, onOpenCreditSubs
     const renderTypeSelection = () => (
         <div className="modal-stack">
             <div className="info-banner">
-                Chọn loại mua trước, sau đó plugin sẽ tạo đúng một order draft để sinh mã chuyển khoản và theo dõi trạng thái thủ công.
+                Chọn trực tiếp gói bạn muốn mua. Plugin sẽ tạo order draft tương ứng để sinh mã chuyển khoản và theo dõi trạng thái thủ công.
             </div>
-            <div className="purchase-choice-grid">
-                {PURCHASE_TYPE_OPTIONS.map((option) => (
-                    <button
-                        key={option.id}
-                        className={`purchase-choice-card ${selectedType === option.id ? "is-selected" : ""}`}
-                        onClick={() => handleSelectType(option.id)}
-                    >
-                        <span className="pill-tag">{option.id === "credit" ? "Credit" : "Subscription"}</span>
-                        <h3>{option.title}</h3>
-                        <p>{option.description}</p>
+            <div className="purchase-catalog-section">
+                <div className="purchase-inline-header">
+                    <div>
+                        <strong>Gói credit</strong>
+                    </div>
+                    <button className="btn" onClick={() => handleSelectType("credit")}>
+                        Xem riêng credit
                     </button>
-                ))}
+                </div>
+                {creditPackages.length ? (
+                    creditPackages.map((pkg) => (
+                        <div key={pkg.id} className="purchase-card purchase-card-selectable">
+                            <div>
+                                <span className="pill-tag">{getPurchasePackagePrimaryValue(pkg)}</span>
+                                <h3>{pkg.displayName}</h3>
+                                <p>{pkg.description}</p>
+                            </div>
+                            <div className="purchase-meta">
+                                <strong>{formatPriceVnd(pkg.priceVnd)}đ</strong>
+                                <span className="purchase-meta-note">Credit cộng sau khi admin duyệt.</span>
+                                <button className="btn primary" onClick={() => handleSelectPackage(pkg)} disabled={submitting}>
+                                    {submitting ? "Đang tạo order..." : "Chọn gói này"}
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="info-banner purchase-empty-note">
+                        Hiện chưa có gói credit nào đang bật cho plugin.
+                    </div>
+                )}
+            </div>
+
+            <div className="purchase-catalog-section">
+                <div className="purchase-inline-header">
+                    <div>
+                        <strong>Gói subscription</strong>
+                    </div>
+                    <button className="btn" onClick={() => handleSelectType("subscription")}>
+                        Xem riêng subscription
+                    </button>
+                </div>
+                {subscriptionPackages.length ? (
+                    subscriptionPackages.map((pkg) => (
+                        <div key={pkg.id} className="purchase-card purchase-card-selectable">
+                            <div>
+                                <span className="pill-tag">{getPurchasePackagePrimaryValue(pkg)}</span>
+                                <h3>{pkg.displayName}</h3>
+                                <p>{pkg.description}</p>
+                            </div>
+                            <div className="purchase-meta">
+                                <strong>{formatPriceVnd(pkg.priceVnd)}đ</strong>
+                                <span className="purchase-meta-note">Subscription kích hoạt hoặc gia hạn sau khi admin duyệt.</span>
+                                <button className="btn primary" onClick={() => handleSelectPackage(pkg)} disabled={submitting}>
+                                    {submitting ? "Đang tạo order..." : "Chọn gói này"}
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="info-banner purchase-empty-note">
+                        Hiện chưa có gói subscription nào đang bật cho plugin.
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -65,18 +65,13 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
                     title="Xem Credit & Subscription"
                     disabled={actionsDisabled}
                 >
-                    <div className="plan-chip">
-                        <span className="chip-label">Gói</span>
-                        <strong>{planSummary.name}</strong>
-                        <small>{planSummary.status}</small>
+                    <div className={`plan-pill plan-tone-${planSummary.tone || "default"}`}>
+                        <span>{planSummary.shortName || planSummary.name}</span>
                     </div>
 
-                    <div className="credits">
-                        <div className="credits-dot"></div>
-                        <div className="credits-copy">
-                            <span>{creditSummary.label}</span>
-                            <small>{creditSummary.detail}</small>
-                        </div>
+                    <div className="credit-pill">
+                        <span className="credit-pill-label">Credit:</span>
+                        <span className="credit-pill-value">{creditSummary.usageText}</span>
                     </div>
                 </button>
 

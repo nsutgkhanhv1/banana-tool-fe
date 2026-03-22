@@ -1,6 +1,7 @@
 import {
     buildImagePreviewUrl,
     capturePhotoshopContext,
+    capturePhotoshopDocumentContext,
     insertGeneratedImage
 } from "./photoshop.js";
 
@@ -29,9 +30,35 @@ const sanitizeNameSegment = (value, fallback = "ai-result") => {
     return normalized || fallback;
 };
 
-const resolveErrorMessage = (error, fallbackMessage) => (
-    error && error.message ? error.message : fallbackMessage
-);
+const resolveErrorMessage = (error, fallbackMessage) => {
+    if (!error) {
+        return fallbackMessage;
+    }
+
+    if (typeof error === "string") {
+        return error;
+    }
+
+    if (error.message) {
+        return error.message;
+    }
+
+    if (error.reason) {
+        return String(error.reason);
+    }
+
+    if (error.number || error.code) {
+        const label = [error.code, error.number].filter(Boolean).join(" / ");
+        return label ? `${fallbackMessage} (${label})` : fallbackMessage;
+    }
+
+    try {
+        const serialized = JSON.stringify(error);
+        return serialized && serialized !== "{}" ? `${fallbackMessage} (${serialized})` : fallbackMessage;
+    } catch (serializationError) {
+        return fallbackMessage;
+    }
+};
 
 const resolveErrorCode = (error, fallbackCode) => (
     error && error.code ? error.code : fallbackCode
@@ -44,13 +71,13 @@ const normalizeMimeType = (mimeType) => (
 );
 
 export const normalizeCapturedContext = (context) => {
-    if (!context || typeof context.documentId === "undefined" || typeof context.layerId === "undefined") {
+    if (!context || typeof context.documentId === "undefined") {
         return null;
     }
 
     return {
         documentId: Number(context.documentId),
-        layerId: Number(context.layerId),
+        layerId: typeof context.layerId === "undefined" || context.layerId === null ? null : Number(context.layerId),
         documentName: context.documentName || "",
         layerName: context.layerName || "",
         documentWidth: typeof context.documentWidth === "number" ? context.documentWidth : null,
@@ -61,6 +88,7 @@ export const normalizeCapturedContext = (context) => {
 
 export const createInsertState = (insert) => {
     const targetContext = normalizeCapturedContext(insert && insert.targetContext ? insert.targetContext : insert);
+    const insertMode = insert && (insert.mode === "reinsert" || insert.mode === "manual") ? insert.mode : "auto";
 
     return {
         status: insert && insert.status === "success" ? "success" : "failed",
@@ -68,7 +96,7 @@ export const createInsertState = (insert) => {
         insertedLayerName: insert && insert.insertedLayerName ? insert.insertedLayerName : "",
         error: insert && insert.error ? insert.error : "",
         errorCode: insert && insert.errorCode ? insert.errorCode : "",
-        mode: insert && insert.mode === "reinsert" ? "reinsert" : "auto",
+        mode: insertMode,
         updatedAt: insert && insert.updatedAt ? insert.updatedAt : Date.now(),
         targetDocumentId: targetContext ? targetContext.documentId : null,
         targetLayerId: targetContext ? targetContext.layerId : null,
@@ -148,6 +176,22 @@ export const captureInsertContextSafely = async ({ fallbackMessage } = {}) => {
         return {
             context: null,
             error: resolveErrorMessage(error, fallbackMessage || "Không thể capture Photoshop context tại thời điểm submit."),
+            errorCode: resolveErrorCode(error, "INVALID_INSERT_CONTEXT")
+        };
+    }
+};
+
+export const captureDocumentInsertContextSafely = async ({ fallbackMessage } = {}) => {
+    try {
+        return {
+            context: normalizeCapturedContext(await capturePhotoshopDocumentContext()),
+            error: "",
+            errorCode: ""
+        };
+    } catch (error) {
+        return {
+            context: null,
+            error: resolveErrorMessage(error, fallbackMessage || "Không thể xác định document Photoshop hiện tại."),
             errorCode: resolveErrorCode(error, "INVALID_INSERT_CONTEXT")
         };
     }

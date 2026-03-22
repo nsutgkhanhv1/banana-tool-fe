@@ -1011,7 +1011,10 @@ export const App = () => {
     };
     const currentPlan = entitlement ? {
         name: entitlementUi.planName,
-        status: entitlementUi.statusLabel
+        status: entitlementUi.statusLabel,
+        statusKind: entitlement.subscriptionStatus || "neutral",
+        shortName: entitlementUi.planName.replace(/^Gói\s+/i, "").trim() || entitlementUi.planName,
+        tone: entitlement.planCode === "free" ? "free" : "default"
     } : {
         name: shellLocked ? "Chưa có gói" : "Chưa có dữ liệu",
         status: shellLocked ? "Đăng nhập để xem" : "Không thể đồng bộ"
@@ -1020,12 +1023,14 @@ export const App = () => {
         remaining: entitlement.creditRemaining,
         label: entitlementUi.creditLabel,
         detail: entitlementUi.creditDetail,
-        severity: entitlementUi.severity
+        severity: entitlementUi.severity,
+        usageText: entitlement.creditLimit > 0 ? `${entitlement.creditUsed}/${entitlement.creditLimit}` : `${entitlement.creditRemaining}`
     } : {
         remaining: 0,
         label: shellLocked ? "0 credit" : "Chưa có dữ liệu",
         detail: shellLocked ? "Đăng nhập để đồng bộ" : "Không thể cập nhật trạng thái mới nhất",
-        severity: "neutral"
+        severity: "neutral",
+        usageText: shellLocked ? "--" : "0"
     };
     const purchaseGateway = useMemo(() => createPurchaseGateway({
         getSession: () => session,

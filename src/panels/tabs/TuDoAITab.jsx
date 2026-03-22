@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
     buildGeneratedResultState,
-    captureInsertContextSafely,
+    captureDocumentInsertContextSafely,
     createResultImageRecord,
     performResultInsert
 } from '../../lib/result-insert.js';
@@ -35,6 +35,7 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
     const [autoZoom, setAutoZoom] = useState(true);
     const [creativity, setCreativity] = useState('balanced');
     const [result, setResult] = useState(null);
+    const [isManualInsertLoading, setIsManualInsertLoading] = useState(false);
     const [showQuickLayerOptions, setShowQuickLayerOptions] = useState(false);
     const {
         items,
@@ -178,7 +179,7 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
 
         try {
             const payload = createGeneratePayload();
-            const insertContext = await captureInsertContextSafely({
+            const insertContext = await captureDocumentInsertContextSafely({
                 fallbackMessage: 'Không thể capture Photoshop context tại thời điểm submit.'
             });
 
@@ -281,6 +282,54 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
             setErrorMessage(error && error.message ? error.message : 'Không thể chuẩn bị request Tự Do AI.');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleManualInsert = async () => {
+        if (!result || isManualInsertLoading) {
+            return;
+        }
+
+        setErrorMessage('');
+        setHistoryNotice('');
+        setIsManualInsertLoading(true);
+
+        try {
+            const insertContext = await captureDocumentInsertContextSafely({
+                fallbackMessage: 'Không có document Photoshop đang mở để chèn thủ công.'
+            });
+            const insertState = await performResultInsert({
+                resultImage: {
+                    imageBase64: result.imageBase64,
+                    mimeType: result.mimeType,
+                    fileName: result.filename,
+                    displayName: result.displayName,
+                    layerNamePrefix: result.layerNamePrefix || 'Tu Do AI'
+                },
+                context: insertContext.context,
+                mode: 'manual',
+                missingContextError: insertContext.error,
+                missingContextErrorCode: insertContext.errorCode,
+                fallbackFailureMessage: 'Không thể chèn thủ công vào Photoshop.'
+            });
+
+            setResult((current) => {
+                if (!current) {
+                    return current;
+                }
+
+                return {
+                    ...current,
+                    capturedContext: insertContext.context || current.capturedContext,
+                    insert: insertState
+                };
+            });
+
+            if (insertState.status === 'success') {
+                setHistoryNotice('Đã chèn thủ công ảnh vào Photoshop dưới dạng layer mới trong document hiện tại.');
+            }
+        } finally {
+            setIsManualInsertLoading(false);
         }
     };
 
@@ -501,6 +550,22 @@ export const TuDoAITab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecord
                             ) : null}
                             {result.insert.error ? (
                                 <div className="result-detail result-detail-error">{result.insert.error}</div>
+                            ) : null}
+                            {result.insert.status !== 'success' ? (
+                                <>
+                                    <button
+                                        className="btn"
+                                        style={{ width: '100%' }}
+                                        onClick={handleManualInsert}
+                                        disabled={isLoading || isManualInsertLoading}
+                                    >
+                                        {isManualInsertLoading ? 'Đang chèn thủ công...' : 'Chèn thủ công'}
+                                    </button>
+                                    <div className="result-detail">
+                                        Đóng mọi hộp thoại hoặc chế độ chỉnh sửa trong Photoshop rồi bấm Chèn thủ công.
+                                        Ảnh sẽ được thêm thành layer mới trong document hiện tại.
+                                    </div>
+                                </>
                             ) : null}
                         </div>
                     </div>
