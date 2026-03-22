@@ -373,6 +373,7 @@ const AuthModal = ({ config, authActions, onClose }) => {
             subtitle={subtitleMap[view]}
             onClose={onClose}
             canClose={true}
+            cardClassName="purchase-modal-card"
             backdropClassName="auth-modal-backdrop"
             cardClassName="auth-modal-card"
             bodyClassName="auth-modal-body"
@@ -1278,6 +1279,115 @@ const PurchaseModal = ({ userProfile, purchaseGateway, onClose, onOpenCreditSubs
         </div>
     );
 
+    const renderPaymentViewCompact = () => (
+        <div className="modal-stack purchase-payment-view">
+            <div className="purchase-inline-header">
+                <button className="back-link" onClick={handleViewOtherPackages}>
+                    ← Xem lại catalog
+                </button>
+                <span className={`purchase-status-badge status-${currentOrder.status}`}>{currentStatusLabel}</span>
+            </div>
+
+            <div className="purchase-manual-callout">
+                <strong>Chuyển khoản thủ công</strong>
+                <span>Sau khi bạn bấm "Tôi đã chuyển khoản", admin sẽ kiểm tra giao dịch ngân hàng rồi mới cộng credit hoặc kích hoạt subscription.</span>
+            </div>
+
+            <div className="account-detail-card purchase-order-hero">
+                <div className="purchase-order-main">
+                    <span className="summary-label">{currentOrder.purchaseType === "credit" ? "Gói credit" : "Gói subscription"}</span>
+                    <strong>{currentPackage.displayName}</strong>
+                    <span>{getPurchasePackagePrimaryValue(currentPackage)}</span>
+                </div>
+                <div className="purchase-order-price">
+                    <span className="summary-label">Số tiền cần chuyển</span>
+                    <strong>{formatPriceVnd(currentOrder.priceVnd)}đ</strong>
+                    <span>Mã order: {currentOrder.orderCode}</span>
+                </div>
+            </div>
+
+            <div className="purchase-fact-grid">
+                <div className="purchase-fact-card">
+                    <span className="summary-label">Mã order</span>
+                    <strong>{currentOrder.orderCode}</strong>
+                    <span>Dùng mã này trong nội dung chuyển khoản để admin đối soát nhanh hơn.</span>
+                </div>
+                <div className="purchase-fact-card">
+                    <span className="summary-label">Hiệu lực draft</span>
+                    <strong>{expiresInLabel}</strong>
+                    <span>Order sẽ hết hạn sau 30 phút nếu bạn chưa xác nhận đã chuyển khoản.</span>
+                </div>
+                <div className="purchase-fact-card">
+                    <span className="summary-label">Thời gian</span>
+                    <strong>{formatPurchaseDate(currentOrder.createdAt)}</strong>
+                    <span>Hết hạn lúc {formatPurchaseDate(currentOrder.expiresAt)}</span>
+                </div>
+            </div>
+
+            <div className="purchase-payment-layout">
+                <div className="account-detail-card purchase-bank-card">
+                    <span className="summary-label">Thông tin chuyển khoản</span>
+                    <div className="purchase-bank-grid">
+                        <div className="purchase-bank-field">
+                            <span className="purchase-bank-label">Ngân hàng</span>
+                            <strong>{currentOrder.bankAccount.bankName}</strong>
+                        </div>
+                        <div className="purchase-bank-field">
+                            <span className="purchase-bank-label">Chủ tài khoản</span>
+                            <strong>{currentOrder.bankAccount.accountHolder}</strong>
+                        </div>
+                        <div className="purchase-bank-field purchase-bank-field-wide">
+                            <span className="purchase-bank-label">Số tài khoản</span>
+                            <strong>{currentOrder.bankAccount.accountNumber}</strong>
+                        </div>
+                        <div className="purchase-bank-field purchase-bank-field-wide purchase-transfer-card">
+                            <span className="purchase-bank-label">Nội dung chuyển khoản</span>
+                            <strong>{currentOrder.transferContent}</strong>
+                            <span>Giữ nguyên nội dung này để admin match đúng order nhanh hơn.</span>
+                        </div>
+                    </div>
+                    <div className="purchase-copy-row">
+                        <button className="btn" onClick={() => handleCopy(currentOrder.bankAccount.accountNumber, "Đã sao chép số tài khoản.")}>
+                            Copy STK
+                        </button>
+                        <button className="btn" onClick={() => handleCopy(currentOrder.transferContent, "Đã sao chép nội dung chuyển khoản.")}>
+                            Copy nội dung
+                        </button>
+                        <button className="btn" onClick={() => handleCopy(currentOrder.orderCode, "Đã sao chép mã order.")}>
+                            Copy mã order
+                        </button>
+                    </div>
+                </div>
+
+                <div className="account-detail-card purchase-qr-card">
+                    <span className="summary-label">Quét QR để chuyển nhanh</span>
+                    {!qrFailed && currentOrder.qrImageUrl ? (
+                        <img
+                            className="purchase-qr-image"
+                            src={currentOrder.qrImageUrl}
+                            alt={`QR thanh toán cho ${currentOrder.orderCode}`}
+                            onError={() => setQrFailed(true)}
+                        />
+                    ) : (
+                        <div className="purchase-qr-fallback">
+                            <strong>QR chưa tải được</strong>
+                            <span>Bạn vẫn có thể chuyển khoản thủ công bằng đúng số tài khoản, số tiền và nội dung ở khối bên trái.</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="modal-actions">
+                <button className="btn primary" onClick={handleConfirmTransferred} disabled={submitting || currentOrder.status !== "draft" || expiresInLabel === "Đã hết hạn"}>
+                    {submitting ? "Đang cập nhật..." : "Tôi đã chuyển khoản"}
+                </button>
+                <button className="btn" onClick={handleRefreshOrder} disabled={submitting}>
+                    Làm mới trạng thái
+                </button>
+            </div>
+        </div>
+    );
+
     const renderWaitingView = () => (
         <div className="modal-stack">
             <div className="success-banner">
@@ -1416,7 +1526,7 @@ const PurchaseModal = ({ userProfile, purchaseGateway, onClose, onOpenCreditSubs
 
         if (currentOrder) {
             if (currentOrder.status === "draft") {
-                return renderPaymentView();
+                return renderPaymentViewCompact();
             }
 
             if (currentOrder.status === "pending_admin_review") {

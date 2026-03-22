@@ -1654,6 +1654,10 @@ input:checked + .slider:before {
     box-shadow: 0 26px 72px rgba(0, 0, 0, 0.55);
 }
 
+.purchase-modal-card {
+    width: min(760px, 100%);
+}
+
 .auth-modal-body {
     padding: 22px;
 }
@@ -1973,6 +1977,104 @@ input:checked + .slider:before {
     margin-top: -2px;
 }
 
+.purchase-payment-view {
+    gap: 16px;
+}
+
+.purchase-manual-callout {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 179, 0, 0.14);
+    background: linear-gradient(180deg, rgba(255, 179, 0, 0.12) 0%, rgba(255, 179, 0, 0.05) 100%);
+}
+
+.purchase-manual-callout strong {
+    font-size: 13px;
+    color: #ffe1a3;
+}
+
+.purchase-manual-callout span {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.purchase-order-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: end;
+    padding: 18px;
+    background:
+        radial-gradient(circle at top right, rgba(255, 179, 0, 0.12), transparent 38%),
+        rgba(255, 255, 255, 0.04);
+}
+
+.purchase-order-main {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.purchase-order-main strong {
+    font-size: 20px;
+}
+
+.purchase-order-main span:last-child {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.purchase-order-price {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-end;
+    text-align: right;
+}
+
+.purchase-order-price strong {
+    font-size: 28px;
+    line-height: 1;
+    color: #ffe1a3;
+}
+
+.purchase-order-price span:last-child {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.purchase-fact-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.purchase-fact-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.purchase-fact-card strong {
+    font-size: 15px;
+}
+
+.purchase-fact-card span:last-child {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
 .purchase-meta-note {
     max-width: 180px;
     color: var(--text-muted);
@@ -1983,19 +2085,59 @@ input:checked + .slider:before {
 
 .purchase-payment-layout {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.9fr);
+    gap: 14px;
+    align-items: stretch;
+}
+
+.purchase-bank-card {
+    gap: 14px;
+}
+
+.purchase-bank-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.purchase-bank-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+    min-width: 0;
+}
+
+.purchase-bank-field-wide {
+    grid-column: 1 / -1;
+}
+
+.purchase-bank-label {
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 9px;
+}
+
+.purchase-bank-field strong {
+    font-size: 14px;
+    line-height: 1.5;
+    word-break: break-word;
 }
 
 .purchase-copy-row {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 8px;
+    margin-top: 0;
 }
 
 .purchase-copy-row .btn {
     min-width: 0;
+    flex: 1 1 140px;
 }
 
 .purchase-transfer-card strong {
@@ -2006,11 +2148,14 @@ input:checked + .slider:before {
 .purchase-qr-card {
     align-items: center;
     justify-content: center;
+    gap: 10px;
+    min-height: 100%;
+    text-align: center;
 }
 
 .purchase-qr-image {
     width: 100%;
-    max-width: 210px;
+    max-width: 240px;
     border-radius: 16px;
     display: block;
     background: #fff;
@@ -2019,7 +2164,7 @@ input:checked + .slider:before {
 }
 
 .purchase-qr-fallback {
-    min-height: 210px;
+    min-height: 240px;
     width: 100%;
     border-radius: 16px;
     border: 1px dashed rgba(255, 255, 255, 0.12);
@@ -2133,6 +2278,12 @@ input:checked + .slider:before {
         grid-template-columns: 1fr;
     }
 
+    .purchase-fact-grid,
+    .purchase-bank-grid,
+    .purchase-order-hero {
+        grid-template-columns: 1fr;
+    }
+
     .purchase-card,
     .purchase-inline-header {
         flex-direction: column;
@@ -2146,6 +2297,11 @@ input:checked + .slider:before {
 
     .purchase-meta-note {
         max-width: none;
+        text-align: left;
+    }
+
+    .purchase-order-price {
+        align-items: flex-start;
         text-align: left;
     }
 
