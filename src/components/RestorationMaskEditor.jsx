@@ -33,8 +33,8 @@ const hasVisibleMask = (canvas) => {
 const drawStroke = (context, fromPoint, toPoint, brushSize, tool) => {
     context.save();
     context.globalCompositeOperation = tool === 'erase' ? 'destination-out' : 'source-over';
-    context.strokeStyle = 'rgba(255, 255, 255, 1)';
-    context.fillStyle = 'rgba(255, 255, 255, 1)';
+    context.strokeStyle = 'rgba(255, 179, 0, 0.72)';
+    context.fillStyle = 'rgba(255, 179, 0, 0.72)';
     context.lineWidth = brushSize;
     context.lineCap = 'round';
     context.lineJoin = 'round';
@@ -48,22 +48,66 @@ const drawStroke = (context, fromPoint, toPoint, brushSize, tool) => {
     context.restore();
 };
 
+const drawMaskImageToCanvas = (canvas, maskDataUrl) => {
+    if (!canvas || !maskDataUrl) {
+        return;
+    }
+
+    const maskImage = new Image();
+    maskImage.onload = () => {
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+            return;
+        }
+
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
+    };
+    maskImage.src = maskDataUrl;
+};
+
 export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disabled }) => {
     const imageRef = useRef(null);
     const canvasRef = useRef(null);
     const [tool, setTool] = useState('paint');
     const [brushSize, setBrushSize] = useState(24);
     const [zoom, setZoom] = useState(1);
+    const [isDrawModeEnabled, setIsDrawModeEnabled] = useState(false);
     const [isPainting, setIsPainting] = useState(false);
     const strokeStateRef = useRef(null);
 
-    const syncCanvasFromMask = () => {
+    const getCanvasPoint = (event) => {
+        const canvas = canvasRef.current;
+
+        if (!canvas) {
+            return null;
+        }
+
+        const bounds = canvas.getBoundingClientRect();
+
+        if (!bounds.width || !bounds.height) {
+            return null;
+        }
+
+        return {
+            x: clamp(((event.clientX - bounds.left) / bounds.width) * canvas.width, 0, canvas.width),
+            y: clamp(((event.clientY - bounds.top) / bounds.height) * canvas.height, 0, canvas.height)
+        };
+    };
+
+    const syncCanvasFromMask = ({ preserveExisting = false } = {}) => {
         const canvas = canvasRef.current;
         const image = imageRef.current;
 
         if (!canvas || !image || !image.clientWidth || !image.clientHeight) {
             return;
         }
+
+        const currentMaskDataUrl = preserveExisting && canvas.width > 0 && canvas.height > 0 && hasVisibleMask(canvas)
+            ? canvas.toDataURL('image/png')
+            : '';
+        const nextMaskDataUrl = currentMaskDataUrl || buildMaskDataUrl(initialMask);
 
         canvas.width = image.clientWidth;
         canvas.height = image.clientHeight;
@@ -76,22 +120,11 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
 
         context.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (!initialMask || !initialMask.imageBase64) {
+        if (!nextMaskDataUrl) {
             return;
         }
 
-        const maskImage = new Image();
-        maskImage.onload = () => {
-            const liveContext = canvas.getContext('2d');
-
-            if (!liveContext) {
-                return;
-            }
-
-            liveContext.clearRect(0, 0, canvas.width, canvas.height);
-            liveContext.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
-        };
-        maskImage.src = buildMaskDataUrl(initialMask);
+        drawMaskImageToCanvas(canvas, nextMaskDataUrl);
     };
 
     useEffect(() => {
@@ -99,36 +132,84 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
     }, [initialMask, previewUrl]);
 
     useEffect(() => {
+        const image = imageRef.current;
+
+        if (!image || typeof ResizeObserver === 'undefined') {
+            return undefined;
+        }
+
+        const observer = new ResizeObserver(() => {
+            syncCanvasFromMask({ preserveExisting: true });
+        });
+
+        observer.observe(image);
+
+        return () => {
+            observer.disconnect();
+        };
+    }, [zoom, initialMask]);
+
+    const commitCanvasMask = () => {
+        const canvas = canvasRef.current;
+
+        if (!canvas) {
+            onChange(null);
+            return;
+        }
+
+        if (!hasVisibleMask(canvas)) {
+            onChange(null);
+            return;
+        }
+
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = MASK_EXPORT_SIZE;
+        exportCanvas.height = MASK_EXPORT_SIZE;
+        const exportContext = exportCanvas.getContext('2d');
+
+        if (!exportContext) {
+            return;
+        }
+
+        exportContext.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
+        exportContext.drawImage(canvas, 0, 0, exportCanvas.width, exportCanvas.height);
+
+        const imageData = exportContext.getImageData(0, 0, exportCanvas.width, exportCanvas.height);
+        const pixels = imageData.data;
+
+        for (let index = 0; index < pixels.length; index += 4) {
+            const alpha = pixels[index + 3];
+            pixels[index] = 255;
+            pixels[index + 1] = 255;
+            pixels[index + 2] = 255;
+            pixels[index + 3] = alpha;
+        }
+
+        exportContext.putImageData(imageData, 0, 0);
+
+        const dataUrl = exportCanvas.toDataURL('image/png');
+        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
+
+        onChange(base64 ? {
+            imageBase64: base64,
+            mimeType: 'image/png',
+            width: MASK_EXPORT_SIZE,
+            height: MASK_EXPORT_SIZE
+        } : null);
+    };
+
+    useEffect(() => {
         if (!isPainting) {
             return undefined;
         }
 
-        const getCanvasPoint = (event) => {
-            const canvas = canvasRef.current;
-
-            if (!canvas) {
-                return null;
-            }
-
-            const bounds = canvas.getBoundingClientRect();
-
-            if (!bounds.width || !bounds.height) {
-                return null;
-            }
-
-            return {
-                x: clamp(((event.clientX - bounds.left) / bounds.width) * canvas.width, 0, canvas.width),
-                y: clamp(((event.clientY - bounds.top) / bounds.height) * canvas.height, 0, canvas.height)
-            };
-        };
-
-        const handleMouseMove = (event) => {
+        const handlePointerMove = (event) => {
             const canvas = canvasRef.current;
             const context = canvas ? canvas.getContext('2d') : null;
             const point = getCanvasPoint(event);
             const strokeState = strokeStateRef.current;
 
-            if (!context || !point || !strokeState) {
+            if (!context || !point || !strokeState || strokeState.pointerId !== event.pointerId) {
                 return;
             }
 
@@ -139,56 +220,64 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
             };
         };
 
-        const handleMouseUp = () => {
-            strokeStateRef.current = null;
-            setIsPainting(false);
-
+        const handleMouseMove = (event) => {
             const canvas = canvasRef.current;
+            const context = canvas ? canvas.getContext('2d') : null;
+            const point = getCanvasPoint(event);
+            const strokeState = strokeStateRef.current;
 
-            if (!canvas) {
-                onChange(null);
+            if (!context || !point || !strokeState || strokeState.inputType !== 'mouse') {
                 return;
             }
 
-            if (!hasVisibleMask(canvas)) {
-                onChange(null);
-                return;
-            }
-
-            const exportCanvas = document.createElement('canvas');
-            exportCanvas.width = MASK_EXPORT_SIZE;
-            exportCanvas.height = MASK_EXPORT_SIZE;
-            const exportContext = exportCanvas.getContext('2d');
-
-            if (!exportContext) {
-                return;
-            }
-
-            exportContext.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
-            exportContext.drawImage(canvas, 0, 0, exportCanvas.width, exportCanvas.height);
-
-            const dataUrl = exportCanvas.toDataURL('image/png');
-            const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
-
-            onChange(base64 ? {
-                imageBase64: base64,
-                mimeType: 'image/png',
-                width: MASK_EXPORT_SIZE,
-                height: MASK_EXPORT_SIZE
-            } : null);
+            drawStroke(context, strokeState.lastPoint, point, brushSize, tool);
+            strokeStateRef.current = {
+                ...strokeState,
+                lastPoint: point
+            };
         };
 
+        const handlePointerUp = (event) => {
+            const strokeState = strokeStateRef.current;
+
+            if (!strokeState || strokeState.pointerId !== event.pointerId) {
+                return;
+            }
+
+            strokeStateRef.current = null;
+            setIsPainting(false);
+            commitCanvasMask();
+        };
+
+        const handleMouseUp = () => {
+            const strokeState = strokeStateRef.current;
+
+            if (!strokeState || strokeState.inputType !== 'mouse') {
+                return;
+            }
+
+            strokeStateRef.current = null;
+            setIsPainting(false);
+            commitCanvasMask();
+        };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+        window.addEventListener('pointercancel', handlePointerUp);
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
 
         return () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerUp);
+            window.removeEventListener('pointercancel', handlePointerUp);
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
     }, [brushSize, isPainting, onChange, tool]);
 
-    const handleCanvasMouseDown = (event) => {
-        if (disabled || event.button !== 0) {
+    const handleCanvasPointerDown = (event) => {
+        if (!isDrawModeEnabled || disabled || (typeof event.button === 'number' && event.button !== 0)) {
             return;
         }
 
@@ -206,11 +295,109 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
         };
 
         strokeStateRef.current = {
-            lastPoint: point
+            lastPoint: point,
+            pointerId: event.pointerId,
+            inputType: 'pointer'
+        };
+        drawStroke(context, point, point, brushSize, tool);
+        setIsPainting(true);
+        if (typeof canvas.setPointerCapture === 'function') {
+            canvas.setPointerCapture(event.pointerId);
+        }
+        event.preventDefault();
+    };
+
+    const handleCanvasMouseDown = (event) => {
+        if (!isDrawModeEnabled || disabled || (typeof event.button === 'number' && event.button !== 0)) {
+            return;
+        }
+
+        const canvas = canvasRef.current;
+        const context = canvas ? canvas.getContext('2d') : null;
+        const point = getCanvasPoint(event);
+
+        if (!canvas || !context || !point) {
+            return;
+        }
+
+        strokeStateRef.current = {
+            lastPoint: point,
+            pointerId: null,
+            inputType: 'mouse'
         };
         drawStroke(context, point, point, brushSize, tool);
         setIsPainting(true);
         event.preventDefault();
+    };
+
+    const handleInteractionPointerMove = (event) => {
+        const canvas = canvasRef.current;
+        const context = canvas ? canvas.getContext('2d') : null;
+        const point = getCanvasPoint(event);
+        const strokeState = strokeStateRef.current;
+
+        if (!isPainting || !context || !point || !strokeState || strokeState.inputType !== 'pointer' || strokeState.pointerId !== event.pointerId) {
+            return;
+        }
+
+        drawStroke(context, strokeState.lastPoint, point, brushSize, tool);
+        strokeStateRef.current = {
+            ...strokeState,
+            lastPoint: point
+        };
+    };
+
+    const handleInteractionMouseMove = (event) => {
+        const canvas = canvasRef.current;
+        const context = canvas ? canvas.getContext('2d') : null;
+        const point = getCanvasPoint(event);
+        const strokeState = strokeStateRef.current;
+
+        if (!isPainting || !context || !point || !strokeState || strokeState.inputType !== 'mouse') {
+            return;
+        }
+
+        drawStroke(context, strokeState.lastPoint, point, brushSize, tool);
+        strokeStateRef.current = {
+            ...strokeState,
+            lastPoint: point
+        };
+    };
+
+    const finishPaintingSession = () => {
+        if (!strokeStateRef.current) {
+            return;
+        }
+
+        strokeStateRef.current = null;
+        setIsPainting(false);
+        commitCanvasMask();
+    };
+
+    const handleInteractionPointerUp = () => {
+        finishPaintingSession();
+    };
+
+    const handleInteractionMouseUp = () => {
+        finishPaintingSession();
+    };
+
+    const handleInteractionMouseLeave = () => {
+        if (isPainting) {
+            finishPaintingSession();
+        }
+    };
+
+    const handleZoomChange = (nextZoom) => {
+        if (nextZoom === zoom) {
+            return;
+        }
+
+        if (canvasRef.current && hasVisibleMask(canvasRef.current)) {
+            commitCanvasMask();
+        }
+
+        setZoom(nextZoom);
     };
 
     const handleReset = () => {
@@ -246,6 +433,14 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
                     >
                         Xóa mask
                     </button>
+                    <button
+                        className={`segment-btn ${isDrawModeEnabled ? 'active' : ''}`}
+                        type="button"
+                        onClick={() => setIsDrawModeEnabled((current) => !current)}
+                        disabled={disabled}
+                    >
+                        {isDrawModeEnabled ? 'Tắt vẽ' : 'Bật vẽ mask'}
+                    </button>
                 </div>
                 <div className="mask-editor-slider-group">
                     <label className="mask-editor-slider-label" htmlFor="repair-mask-brush">
@@ -269,7 +464,7 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
                             key={zoomLevel}
                             className={`btn ${zoom === zoomLevel ? 'primary' : ''}`}
                             type="button"
-                            onClick={() => setZoom(zoomLevel)}
+                            onClick={() => handleZoomChange(zoomLevel)}
                             disabled={disabled}
                         >
                             {`${zoomLevel}x`}
@@ -282,7 +477,7 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
             </div>
 
             <div className="mask-editor-scroll">
-                <div className="mask-editor-zoom-stage" style={{ transform: `scale(${zoom})` }}>
+                <div className="mask-editor-zoom-stage" style={{ width: `${zoom * 100}%` }}>
                     <div className="face-region-stage">
                         <img
                             ref={imageRef}
@@ -294,7 +489,16 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
                         <canvas
                             ref={canvasRef}
                             className={`mask-editor-canvas ${disabled ? 'is-disabled' : ''}`}
+                        />
+                        <div
+                            className={`mask-editor-interaction-layer ${disabled ? 'is-disabled' : ''} ${isDrawModeEnabled ? 'is-armed' : ''} ${tool === 'erase' ? 'is-erase' : ''}`}
+                            onPointerDown={handleCanvasPointerDown}
                             onMouseDown={handleCanvasMouseDown}
+                            onPointerMove={handleInteractionPointerMove}
+                            onMouseMove={handleInteractionMouseMove}
+                            onPointerUp={handleInteractionPointerUp}
+                            onMouseUp={handleInteractionMouseUp}
+                            onMouseLeave={handleInteractionMouseLeave}
                         />
                     </div>
                 </div>

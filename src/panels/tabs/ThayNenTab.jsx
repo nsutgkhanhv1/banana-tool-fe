@@ -482,13 +482,6 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
 
     return (
         <div className="tab-pane" ref={rootRef} tabIndex={0}>
-            <div className={`app-overlay ${isLoading ? 'active' : ''}`}>
-                <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{color: '#F4B400', width: '24px', height: '24px'}}>
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
-                </svg>
-                <span className="overlay-text">Đang thay nền và chuẩn bị chèn vào Photoshop...</span>
-            </div>
-
             <div className="section">
                 <div className="flex-row">
                     <div className="flex-col">
@@ -626,39 +619,41 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                 </div>
             </div>
 
-            <div className="section">
-                <div className="section-header">
-                    <span className="section-label">Mask chủ thể</span>
-                    <button
-                        className="btn"
-                        type="button"
-                        onClick={() => setShowMaskEditor((current) => !current)}
-                        disabled={!activeImage}
-                    >
-                        {showMaskEditor ? 'Ẩn editor' : 'Mở editor'}
-                    </button>
+            {false ? (
+                <div className="section">
+                    <div className="section-header">
+                        <span className="section-label">Mask chủ thể</span>
+                        <button
+                            className="btn"
+                            type="button"
+                            onClick={() => setShowMaskEditor((current) => !current)}
+                            disabled={!activeImage}
+                        >
+                            {showMaskEditor ? 'Ẩn editor' : 'Mở editor'}
+                        </button>
+                    </div>
+
+                    {activeImage ? (
+                        <>
+                            <div className="face-region-summary">
+                                <span>{repairMask ? 'Đã có mask chỉnh tay cho ảnh hiện tại.' : 'Chưa có mask chỉnh tay nào.'}</span>
+                                <span>Dùng brush để giữ lại chủ thể chính xác hơn trước khi thay nền.</span>
+                            </div>
+
+                            {showMaskEditor ? (
+                                <RestorationMaskEditor
+                                    previewUrl={activeImage.previewUrl}
+                                    initialMask={repairMask}
+                                    onChange={setRepairMask}
+                                    disabled={actionsDisabled}
+                                />
+                            ) : null}
+                        </>
+                    ) : (
+                        <div className="reference-note">Thêm ảnh đầu vào trước để mở mask editor.</div>
+                    )}
                 </div>
-
-                {activeImage ? (
-                    <>
-                        <div className="face-region-summary">
-                            <span>{repairMask ? 'Đã có mask chỉnh tay cho ảnh hiện tại.' : 'Chưa có mask chỉnh tay nào.'}</span>
-                            <span>Dùng brush để giữ lại chủ thể chính xác hơn trước khi thay nền.</span>
-                        </div>
-
-                        {showMaskEditor ? (
-                            <RestorationMaskEditor
-                                previewUrl={activeImage.previewUrl}
-                                initialMask={repairMask}
-                                onChange={setRepairMask}
-                                disabled={actionsDisabled}
-                            />
-                        ) : null}
-                    </>
-                ) : (
-                    <div className="reference-note">Thêm ảnh đầu vào trước để mở mask editor.</div>
-                )}
-            </div>
+            ) : null}
 
             {errorMessage ? (
                 <div className="section">
@@ -715,6 +710,20 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             ) : null}
 
             <div className="section" style={{marginTop: 'auto'}}>
+                {isLoading ? (
+                    <div className="cta-status-panel" role="status" aria-live="polite">
+                        <div className="cta-status-panel-icon" aria-hidden="true">
+                            <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                                <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                            </svg>
+                        </div>
+                        <div className="cta-status-panel-content">
+                            <strong>Đang thay nền</strong>
+                            <span>Hệ thống đang generate và chuẩn bị chèn kết quả vào Photoshop.</span>
+                        </div>
+                    </div>
+                ) : null}
+
                 <button
                     className="btn primary full-width"
                     onClick={handleCreate}
@@ -725,7 +734,7 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                             <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{marginRight: '8px'}}>
                                 <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
                             </svg>
-                            Đang xử lý...
+                            Đang thay nền...
                         </>
                     ) : (
                         <>{result ? 'Regenerate' : 'Thay Nền'}</>

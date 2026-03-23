@@ -222,6 +222,56 @@ body {
     -webkit-text-fill-color: currentColor;
 }
 
+.cta-status-panel {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 179, 0, 0.18);
+    background:
+        linear-gradient(180deg, rgba(255, 179, 0, 0.12) 0%, rgba(255, 179, 0, 0.05) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.cta-status-panel-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: rgba(15, 15, 15, 0.28);
+    color: #ffd36d;
+    flex-shrink: 0;
+}
+
+.cta-status-panel-icon .spinner {
+    width: 18px;
+    height: 18px;
+}
+
+.cta-status-panel-content {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.cta-status-panel-content strong {
+    color: #fff1c2;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.cta-status-panel-content span {
+    color: rgba(255, 237, 195, 0.82);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
 /* Header */
 .header {
     display: flex;
@@ -1088,7 +1138,7 @@ body {
 
 .mask-editor-toolset {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
 }
 
@@ -1115,12 +1165,15 @@ body {
 
 .mask-editor-scroll {
     overflow: auto;
-    padding-bottom: 4px;
+    max-height: min(72vh, 680px);
+    padding: 4px 0 8px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .mask-editor-zoom-stage {
-    transform-origin: top left;
-    width: fit-content;
+    min-width: 100%;
 }
 
 .mask-editor-canvas {
@@ -1128,11 +1181,48 @@ body {
     inset: 0;
     width: 100%;
     height: 100%;
+    z-index: 2;
+    pointer-events: none;
     cursor: crosshair;
+    touch-action: none;
+    user-select: none;
 }
 
 .mask-editor-canvas.is-disabled {
     cursor: not-allowed;
+}
+
+.mask-editor-interaction-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    background: transparent;
+    touch-action: none;
+    pointer-events: none;
+    cursor: default;
+}
+
+.mask-editor-interaction-layer.is-disabled {
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.mask-editor-interaction-layer.is-armed {
+    pointer-events: auto;
+    cursor: crosshair;
+}
+
+.mask-editor-interaction-layer.is-armed.is-erase {
+    cursor: cell;
+}
+
+.mask-editor-shell .face-region-stage {
+    width: 100%;
+}
+
+.mask-editor-shell .face-region-image {
+    width: 100%;
+    max-height: none;
 }
 
 .switch {
