@@ -100,6 +100,19 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     const [isQuickLayerImporting, setIsQuickLayerImporting] = useState(false);
     const [showMaskEditor, setShowMaskEditor] = useState(false);
     const [repairMask, setRepairMask] = useState(null);
+    const [memoName, setMemoName] = useState('');
+    const [savedPrompts, setSavedPrompts] = useState(() => {
+        try {
+            const stored = localStorage.getItem('banana_saved_prompts');
+            return stored ? JSON.parse(stored) : [];
+        } catch (e) {
+            return [];
+        }
+    });
+
+    useEffect(() => {
+        localStorage.setItem('banana_saved_prompts', JSON.stringify(savedPrompts));
+    }, [savedPrompts]);
     const {
         items,
         activeImageId,
@@ -467,6 +480,36 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         setPrompt(BACKGROUND_PRESET_PROMPTS[presetId] || '');
     };
 
+    const handleSavePrompt = () => {
+        if (!prompt.trim()) {
+            setErrorMessage('Vui lòng nhập prompt trước khi lưu.');
+            return;
+        }
+
+        const id = Date.now().toString();
+        const newPrompt = {
+            id,
+            text: prompt.trim(),
+            memo: memoName.trim() || `Prompt ${new Date().toLocaleDateString()}`
+        };
+
+        setSavedPrompts((current) => [newPrompt, ...current]);
+        setHistoryNotice('Đã lưu cấu hình prompt thành công.');
+    };
+
+    const handleDeletePrompt = (id) => {
+        setSavedPrompts((current) => current.filter((p) => p.id !== id));
+        setHistoryNotice('Đã xóa prompt đã lưu.');
+    };
+
+    const handleLoadSavedPrompt = (id) => {
+        const saved = savedPrompts.find((p) => p.id === id);
+        if (saved) {
+            setPrompt(saved.text);
+            setMemoName(saved.memo);
+        }
+    };
+
     const handleRemoveImage = (imageId, event) => {
         if (actionsDisabled) {
             onRequireAuth();
@@ -600,21 +643,87 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                     ))}
                 </select>
             </div>
-
             <div className="section">
-                <div className="section-header">
-                    <span className="section-label">Prompt</span>
+                <div className="prompt-toolbar">
+                    <div className="prompt-toolbar-left">
+                        <span className="prompt-label">Prompt</span>
+                        <div className="prompt-icon-wrapper">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="22" y1="12" x2="18" y2="12"></line>
+                                <line x1="6" y1="12" x2="2" y2="12"></line>
+                                <line x1="12" y1="6" x2="12" y2="2"></line>
+                                <line x1="12" y1="22" x2="12" y2="18"></line>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </div>
+                    </div>
+                    <div className="prompt-toolbar-actions">
+                        <button className="btn-action primary-action" onClick={() => {}} title="Tối ưu prompt AI">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                            </svg>
+                            <span>Tối ưu prompt AI</span>
+                        </button>
+                    </div>
                 </div>
-                <div className="prompt-box">
-                    <textarea
-                        className="textarea"
-                        placeholder="Mô tả nền mới, ánh sáng, mood hoặc tone màu mong muốn..."
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        maxLength={500}
-                    ></textarea>
-                    <div className="prompt-footer">
-                        <span className="char-counter">{prompt.length}/500</span>
+
+                <div className="prompt-content-box">
+                    <div className="prompt-secondary-row">
+                        <div className="prompt-field-group" style={{flex: 1}}>
+                            <span className="prompt-field-label">Cấu hình đã lưu:</span>
+                            <select 
+                                className="dropdown prompt-select" 
+                                value="" 
+                                onChange={(e) => handleLoadSavedPrompt(e.target.value)}
+                            >
+                                <option value="" disabled>--- Chọn prompt đã lưu ---</option>
+                                {savedPrompts.map(p => (
+                                    <option key={p.id} value={p.id}>{p.memo}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="prompt-field-group">
+                        <div className="prompt-textarea-header">
+                            <span className="prompt-field-label">vào prompt:</span>
+                            <div className="prompt-textarea-actions">
+                                <button className="btn-inline" onClick={handleSavePrompt} title="Lưu">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                        <polyline points="7 3 7 8 15 8"></polyline>
+                                    </svg>
+                                    <span>Lưu</span>
+                                </button>
+                                <button className="btn-inline" onClick={() => setPrompt('')} title="Xóa">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    <span>Xóa</span>
+                                </button>
+                            </div>
+                        </div>
+                        <textarea
+                            className="prompt-textarea"
+                            placeholder="Mô tả nền mới, ánh sáng, mood hoặc tone màu mong muốn..."
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                        ></textarea>
+                        <div className="prompt-char-count">{prompt.length}/500</div>
+                    </div>
+                    
+                    <div className="prompt-field-group">
+                        <span className="prompt-field-label">Đặt tên gợi nhớ (tùy chọn):</span>
+                        <input
+                            type="text"
+                            className="prompt-memo-input"
+                            placeholder="vd: Biển xanh nắng vàng..."
+                            value={memoName}
+                            onChange={(e) => setMemoName(e.target.value)}
+                        />
                     </div>
                 </div>
             </div>

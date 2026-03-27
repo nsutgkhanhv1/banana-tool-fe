@@ -2,16 +2,17 @@ import React, { useEffect, useRef, useState } from "react";
 import { PLUGIN_DISPLAY_NAME } from "../lib/plugin-config.js";
 
 const AUTHENTICATED_MENU_ITEMS = [
-    { id: "account", label: "Tài khoản" },
-    { id: "history", label: "Lịch sử" },
-    { id: "settings", label: "Cài đặt" },
-    { id: "purchase", label: "Mua gói" },
-    { id: "logout", label: "Đăng xuất" }
+    { id: "account", label: "TÀI KHOẢN" },
+    { id: "history", label: "LỊCH SỬ" },
+    { id: "purchase", label: "MUA GÓI" },
+    { id: "settings", label: "CÀI ĐẶT" },
+    { id: "support", label: "NHÓM ZALO SUPPORT" },
+    { id: "logout", label: "ĐĂNG XUẤT" }
 ];
 
 const GUEST_MENU_ITEMS = [
-    { id: "account", label: "Đăng nhập" },
-    { id: "purchase", label: "Mua gói" }
+    { id: "account", label: "ĐĂNG NHẬP" },
+    { id: "purchase", label: "MUA GÓI" }
 ];
 
 export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus, actionsDisabled, onAction }) => {
@@ -45,71 +46,52 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
     };
 
     return (
-        <div className="header">
-            <div className="header-brand">
-                <div className="logo-wrapper">
-                    <svg className="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                    </svg>
-                </div>
-                <div className="brand-copy">
-                    <span className="brand-title">{PLUGIN_DISPLAY_NAME}</span>
-                </div>
+        <div className="header-container">
+            <div className="brand-banner">
+                <h1>MEKO BANANA PRO</h1>
             </div>
-
-            <div className="header-controls">
-                <button
-                    className={`entitlement-summary entitlement-${creditSummary.severity || "neutral"}`}
-                    onClick={() => onAction("credit-subscription")}
-                    title="Xem Credit & Subscription"
-                    disabled={actionsDisabled}
-                >
-                    <div className="credit-pill">
-                        <span className="credit-pill-label">Credit:</span>
-                        <span className="credit-pill-value">{creditSummary.usageText}</span>
-                    </div>
-                </button>
-
-                <button className="btn" onClick={() => onAction("purchase")} disabled={actionsDisabled}>
-                    Mua gói
-                </button>
-
-                <button className="btn" onClick={() => onAction("history")} disabled={actionsDisabled}>
-                    Lịch sử
-                </button>
-
-                <button className="btn icon-with-label" onClick={() => onAction("refresh")} title="Làm mới plugin" disabled={actionsDisabled}>
-                    <svg className={refreshStatus === "refreshing" ? "spinner" : ""} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="23 4 23 10 17 10"></polyline>
-                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                    </svg>
-                    <span>{refreshStatus === "refreshing" ? "Đang làm mới" : "Làm mới"}</span>
-                </button>
-
-                <div className="account-menu" ref={menuRef}>
-                    <button className="account-trigger" onClick={() => !actionsDisabled && setMenuOpen((value) => !value)} disabled={actionsDisabled}>
-                        <div className="account-trigger-copy">
-                            <strong>{userSummary.displayName}</strong>
-                            <span>{userSummary.identifier}</span>
-                        </div>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
+            
+            <div className="header-toolbar">
+                <div className="header-controls">
+                    <button
+                        className={`btn-pill credit-btn entitlement-${creditSummary.severity || "neutral"}`}
+                        onClick={() => onAction("credit-subscription")}
+                        title="Xem Credit & Subscription"
+                        disabled={actionsDisabled}
+                    >
+                        <span>Credit:{creditSummary.usageText}</span>
                     </button>
 
-                    {menuOpen ? (
-                        <div className="account-dropdown">
-                            {menuItems.map((item) => (
-                                <button
-                                    key={item.id}
-                                    className="account-dropdown-item"
-                                    onClick={() => handleMenuAction(item.id)}
-                                >
-                                    {item.label}
-                                </button>
-                            ))}
-                        </div>
-                    ) : null}
+                    <button className="btn-pill" onClick={() => onAction("refresh")} title="Làm mới plugin" disabled={actionsDisabled}>
+                        <svg className={refreshStatus === "refreshing" ? "spinner" : ""} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        </svg>
+                        <span>{refreshStatus === "refreshing" ? "Đang làm mới" : "Làm mới"}</span>
+                    </button>
+
+                    <div className="account-dropdown-wrapper" ref={menuRef}>
+                        <button className="btn-pill account-trigger" onClick={() => !actionsDisabled && setMenuOpen((value) => !value)} disabled={actionsDisabled}>
+                            <span className="account-identifier">{userSummary.identifier}</span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
+
+                        {menuOpen ? (
+                            <div className="account-dropdown">
+                                {menuItems.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        className="account-dropdown-item"
+                                        onClick={() => handleMenuAction(item.id)}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
                 </div>
             </div>
         </div>
