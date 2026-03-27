@@ -15,33 +15,32 @@ const GUEST_MENU_ITEMS = [
     { id: "purchase", label: "MUA GÓI" }
 ];
 
-export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus, actionsDisabled, onAction }) => {
-    const [menuOpen, setMenuOpen] = useState(false);
+export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus, actionsDisabled, onAction, isMenuOpen, onMenuToggle }) => {
     const menuRef = useRef(null);
     const isAuthenticated = userSummary.identifier !== "Chưa đăng nhập";
     const menuItems = isAuthenticated ? AUTHENTICATED_MENU_ITEMS : GUEST_MENU_ITEMS;
 
     useEffect(() => {
-        if (!menuOpen) {
+        if (!isMenuOpen) {
             return undefined;
         }
 
         const handleClickOutside = (event) => {
             if (menuRef.current && !menuRef.current.contains(event.target)) {
-                setMenuOpen(false);
+                onMenuToggle(false);
             }
         };
 
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [menuOpen]);
+    }, [isMenuOpen, onMenuToggle]);
 
     const handleMenuAction = (action) => {
         if (actionsDisabled) {
             return;
         }
 
-        setMenuOpen(false);
+        onMenuToggle(false);
         onAction(action);
     };
 
@@ -71,14 +70,14 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
                     </button>
 
                     <div className="account-dropdown-wrapper" ref={menuRef}>
-                        <button className="btn-pill account-trigger" onClick={() => !actionsDisabled && setMenuOpen((value) => !value)} disabled={actionsDisabled}>
+                        <button className="btn-pill account-trigger" onClick={() => !actionsDisabled && onMenuToggle(!isMenuOpen)} disabled={actionsDisabled}>
                             <span className="account-identifier">{userSummary.identifier}</span>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
                         </button>
 
-                        {menuOpen ? (
+                        {isMenuOpen ? (
                             <div className="account-dropdown">
                                 {menuItems.map((item) => (
                                     <button

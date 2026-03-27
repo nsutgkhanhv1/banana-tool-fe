@@ -505,6 +505,15 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     const [restorationIntensity, setRestorationIntensity] = useState(defaultPresetProfile.restorationIntensity);
     const [colorTone, setColorTone] = useState(defaultPresetProfile.colorTone);
     const [prompt, setPrompt] = useState('');
+    const [memoName, setMemoName] = useState('');
+    const [savedPrompts, setSavedPrompts] = useState(() => {
+        try {
+            const saved = localStorage.getItem('banana_saved_prompts_phucche');
+            return saved ? JSON.parse(saved) : [];
+        } catch (e) {
+            return [];
+        }
+    });
     const [result, setResult] = useState(null);
     const [isManualInsertLoading, setIsManualInsertLoading] = useState(false);
     const [showQuickLayerOptions, setShowQuickLayerOptions] = useState(false);
@@ -678,6 +687,30 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             clientRequestId: `phuc-che-anh-${Date.now()}`,
             appVersion: 'uxp-dev'
         };
+    };
+
+    const handleSavePrompt = () => {
+        if (!prompt.trim()) return;
+        const name = memoName.trim() || `Prompt ${new Date().toLocaleString()}`;
+        const newSaved = [...savedPrompts.filter(p => p.name !== name), { name, prompt: prompt.trim() }];
+        setSavedPrompts(newSaved);
+        localStorage.setItem('banana_saved_prompts_phucche', JSON.stringify(newSaved));
+        setMemoName(name);
+    };
+
+    const handleDeletePrompt = (name) => {
+        const newSaved = savedPrompts.filter(p => p.name !== name);
+        setSavedPrompts(newSaved);
+        localStorage.setItem('banana_saved_prompts_phucche', JSON.stringify(newSaved));
+        if (memoName === name) setMemoName('');
+    };
+
+    const handleLoadSavedPrompt = (name) => {
+        const selected = savedPrompts.find(p => p.name === name);
+        if (selected) {
+            setPrompt(selected.prompt);
+            setMemoName(selected.name);
+        }
     };
 
     const handleCreate = async () => {
@@ -1136,18 +1169,95 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                 </div>
 
                 {showAdvancedPrompt ? (
-                    <div className="prompt-box">
-                        <textarea
-                            className="textarea"
-                            placeholder="Gợi ý thêm về tone màu, mức giữ nguyên ảnh gốc, hoặc vùng cần ưu tiên..."
-                            value={prompt}
-                            onChange={(event) => setPrompt(event.target.value)}
-                            maxLength={500}
-                        ></textarea>
-                        <div className="prompt-footer">
-                            <span className="char-counter">{prompt.length}/500</span>
+                    <>
+                    <div className="prompt-toolbar">
+                        <div className="prompt-toolbar-left">
+                            <span className="prompt-label">Prompt</span>
+                            <div className="prompt-icon-wrapper">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="22" y1="12" x2="18" y2="12"></line>
+                                    <line x1="6" y1="12" x2="2" y2="12"></line>
+                                    <line x1="12" y1="6" x2="12" y2="2"></line>
+                                    <line x1="12" y1="22" x2="12" y2="18"></line>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </div>
+                        </div>
+                        <div className="prompt-toolbar-actions">
+                            <button className="btn-action primary-action" onClick={() => {}} title="Tối ưu prompt AI">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                                </svg>
+                                <span>Tối ưu prompt AI</span>
+                            </button>
                         </div>
                     </div>
+
+                    <div className="prompt-content-box">
+                        <div className="prompt-secondary-row">
+                            <div className="prompt-field-group" style={{flex: 1}}>
+                                <span className="prompt-field-label">Cấu hình đã lưu:</span>
+                                <select 
+                                    className="dropdown prompt-select" 
+                                    value={memoName} 
+                                    onChange={(e) => handleLoadSavedPrompt(e.target.value)}
+                                >
+                                    <option value="">--- Chọn prompt đã lưu ---</option>
+                                    {savedPrompts.map(p => (
+                                        <option key={p.name} value={p.name}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="prompt-field-group">
+                            <span className="prompt-field-label">vào prompt:</span>
+                            <textarea
+                                className="prompt-textarea"
+                                placeholder="Gợi ý thêm về tone màu, mức giữ nguyên ảnh gốc, hoặc vùng cần ưu tiên..."
+                                value={prompt}
+                                onChange={(event) => setPrompt(event.target.value)}
+                                maxLength={500}
+                            ></textarea>
+                            <div className="prompt-char-count">{prompt.length}/500</div>
+                        </div>
+                        
+                        <div className="prompt-footer-row">
+                            <div className="prompt-field-group" style={{flex: 1}}>
+                                <input
+                                    type="text"
+                                    className="prompt-memo-input"
+                                    placeholder="Đặt tên gợi nhớ (tùy chọn)..."
+                                    value={memoName}
+                                    onChange={(e) => setMemoName(e.target.value)}
+                                />
+                            </div>
+                            <div className="prompt-footer-actions">
+                                <button className="btn-footer-action primary" onClick={handleSavePrompt} title="Lưu">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                        <polyline points="7 3 7 8 15 8"></polyline>
+                                    </svg>
+                                    <span>Lưu</span>
+                                </button>
+                                <button 
+                                    className="btn-footer-action" 
+                                    onClick={() => handleDeletePrompt(memoName)} 
+                                    disabled={!memoName || !savedPrompts.some(p => p.name === memoName)} 
+                                    title="Xóa"
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    <span>Xóa</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    </>
                 ) : (
                     <div className="reference-note">Để trống nếu bạn chỉ muốn chạy theo preset và các toggle hiện tại.</div>
                 )}
@@ -1316,7 +1426,7 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                                 </div>
                             ) : null}
                             {result.insert.insertedLayerName ? (
-                                <div className="result-detail">Layer m?i: {result.insert.insertedLayerName}</div>
+                                <div className="result-detail">Layer mới: {result.insert.insertedLayerName}</div>
                             ) : null}
                             {result.insert.error ? (
                                 <div className="result-detail result-detail-error">{result.insert.error}</div>
@@ -1329,11 +1439,11 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                                         onClick={handleManualInsert}
                                         disabled={isLoading || isManualInsertLoading}
                                     >
-                                        {isManualInsertLoading ? '?ang ch?n th? c?ng...' : 'Ch?n th? c?ng'}
+                                        {isManualInsertLoading ? 'Đang chèn thủ công...' : 'Chèn thủ công'}
                                     </button>
                                     <div className="result-detail">
-                                        ??ng m?i h?p tho?i ho?c ch? ?? ch?nh s?a trong Photoshop r?i b?m Ch?n th? c?ng.
-                                        ?nh s? ???c th?m th?nh layer m?i trong document hi?n t?i.
+                                        Đóng mọi hộp thoại hoặc chế độ chỉnh sửa trong Photoshop rồi bấm Chèn thủ công.
+                                        Ảnh sẽ được thêm thành layer mới trong document hiện tại.
                                     </div>
                                 </>
                             ) : null}

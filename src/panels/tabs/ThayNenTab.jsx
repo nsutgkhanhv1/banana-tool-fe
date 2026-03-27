@@ -103,15 +103,26 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     const [memoName, setMemoName] = useState('');
     const [savedPrompts, setSavedPrompts] = useState(() => {
         try {
-            const stored = localStorage.getItem('banana_saved_prompts');
-            return stored ? JSON.parse(stored) : [];
+            const savedNew = localStorage.getItem('banana_saved_prompts_thaynen');
+            if (savedNew) return JSON.parse(savedNew);
+            
+            const savedOld = localStorage.getItem('banana_saved_prompts');
+            if (savedOld) {
+                const migrated = JSON.parse(savedOld).map(p => ({
+                    name: p.memo || p.name,
+                    prompt: p.text || p.prompt
+                }));
+                localStorage.setItem('banana_saved_prompts_thaynen', JSON.stringify(migrated));
+                return migrated;
+            }
+            return [];
         } catch (e) {
             return [];
         }
     });
 
     useEffect(() => {
-        localStorage.setItem('banana_saved_prompts', JSON.stringify(savedPrompts));
+        localStorage.setItem('banana_saved_prompts_thaynen', JSON.stringify(savedPrompts));
     }, [savedPrompts]);
     const {
         items,
@@ -485,28 +496,25 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
             setErrorMessage('Vui lòng nhập prompt trước khi lưu.');
             return;
         }
-
-        const id = Date.now().toString();
-        const newPrompt = {
-            id,
-            text: prompt.trim(),
-            memo: memoName.trim() || `Prompt ${new Date().toLocaleDateString()}`
-        };
-
-        setSavedPrompts((current) => [newPrompt, ...current]);
+        const name = memoName.trim() || `Prompt ${new Date().toLocaleString()}`;
+        const newSaved = [...savedPrompts.filter(p => p.name !== name), { name, prompt: prompt.trim() }];
+        setSavedPrompts(newSaved);
+        setMemoName(name);
         setHistoryNotice('Đã lưu cấu hình prompt thành công.');
     };
 
-    const handleDeletePrompt = (id) => {
-        setSavedPrompts((current) => current.filter((p) => p.id !== id));
+    const handleDeletePrompt = (name) => {
+        const newSaved = savedPrompts.filter(p => p.name !== name);
+        setSavedPrompts(newSaved);
+        if (memoName === name) setMemoName('');
         setHistoryNotice('Đã xóa prompt đã lưu.');
     };
 
-    const handleLoadSavedPrompt = (id) => {
-        const saved = savedPrompts.find((p) => p.id === id);
-        if (saved) {
-            setPrompt(saved.text);
-            setMemoName(saved.memo);
+    const handleLoadSavedPrompt = (name) => {
+        const selected = savedPrompts.find(p => p.name === name);
+        if (selected) {
+            setPrompt(selected.prompt);
+            setMemoName(selected.name);
         }
     };
 
@@ -674,38 +682,19 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                             <span className="prompt-field-label">Cấu hình đã lưu:</span>
                             <select 
                                 className="dropdown prompt-select" 
-                                value="" 
+                                value={memoName} 
                                 onChange={(e) => handleLoadSavedPrompt(e.target.value)}
                             >
-                                <option value="" disabled>--- Chọn prompt đã lưu ---</option>
+                                <option value="">--- Chọn prompt đã lưu ---</option>
                                 {savedPrompts.map(p => (
-                                    <option key={p.id} value={p.id}>{p.memo}</option>
+                                    <option key={p.name} value={p.name}>{p.name}</option>
                                 ))}
                             </select>
                         </div>
                     </div>
 
                     <div className="prompt-field-group">
-                        <div className="prompt-textarea-header">
-                            <span className="prompt-field-label">vào prompt:</span>
-                            <div className="prompt-textarea-actions">
-                                <button className="btn-inline" onClick={handleSavePrompt} title="Lưu">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                                        <polyline points="7 3 7 8 15 8"></polyline>
-                                    </svg>
-                                    <span>Lưu</span>
-                                </button>
-                                <button className="btn-inline" onClick={() => setPrompt('')} title="Xóa">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                    <span>Xóa</span>
-                                </button>
-                            </div>
-                        </div>
+                        <span className="prompt-field-label">vào prompt:</span>
                         <textarea
                             className="prompt-textarea"
                             placeholder="Mô tả nền mới, ánh sáng, mood hoặc tone màu mong muốn..."
@@ -715,15 +704,38 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         <div className="prompt-char-count">{prompt.length}/500</div>
                     </div>
                     
-                    <div className="prompt-field-group">
-                        <span className="prompt-field-label">Đặt tên gợi nhớ (tùy chọn):</span>
-                        <input
-                            type="text"
-                            className="prompt-memo-input"
-                            placeholder="vd: Biển xanh nắng vàng..."
-                            value={memoName}
-                            onChange={(e) => setMemoName(e.target.value)}
-                        />
+                    <div className="prompt-footer-row">
+                        <div className="prompt-field-group" style={{flex: 1}}>
+                            <input
+                                type="text"
+                                className="prompt-memo-input"
+                                placeholder="Đặt tên gợi nhớ (tùy chọn)..."
+                                value={memoName}
+                                onChange={(e) => setMemoName(e.target.value)}
+                            />
+                        </div>
+                        <div className="prompt-footer-actions">
+                            <button className="btn-footer-action primary" onClick={handleSavePrompt} title="Lưu">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                <span>Lưu</span>
+                            </button>
+                            <button 
+                                className="btn-footer-action" 
+                                onClick={() => handleDeletePrompt(memoName)} 
+                                disabled={!memoName || !savedPrompts.some(p => p.name === memoName)} 
+                                title="Xóa"
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                                <span>Xóa</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

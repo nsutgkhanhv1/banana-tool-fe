@@ -146,6 +146,7 @@ export const App = () => {
         email: "",
         notice: ""
     });
+    const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
     const entitlementRef = useRef(null);
 
     useEffect(() => {
@@ -1188,7 +1189,7 @@ export const App = () => {
     }
 
     return (
-        <div className={`app-container ${activeModal ? "has-modal" : ""}`}>
+        <div className={`app-container ${activeModal ? "has-modal" : ""} ${isHeaderMenuOpen ? "has-header-menu" : ""}`}>
             <Header
                 userSummary={currentUser}
                 planSummary={currentPlan}
@@ -1196,6 +1197,8 @@ export const App = () => {
                 refreshStatus={refreshStatus}
                 actionsDisabled={pluginBusy}
                 onAction={handleHeaderAction}
+                isMenuOpen={isHeaderMenuOpen}
+                onMenuToggle={setIsHeaderMenuOpen}
             />
 
             <div className={`shell-body ${activeAuxScreen ? "has-aux-screen" : ""}`}>
