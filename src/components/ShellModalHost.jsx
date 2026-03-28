@@ -1750,7 +1750,9 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
         try {
             await authActions.resendVerifyEmail({ email: userProfile.email });
             setNotice("OTP xác thực đã được gửi tới email hiện tại.");
-            setView("verify-email");
+            if (view !== "overview") {
+                setView("verify-email");
+            }
         } catch (nextError) {
             setError(getApiErrorMessage(nextError));
         } finally {
@@ -1789,10 +1791,13 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
         setError("");
 
         try {
-            await authActions.startEmailChange({ newEmail });
+            const updated = await authActions.startEmailChange({ newEmail });
+            setNewEmail(updated.pendingEmail || newEmail);
             setOtp("");
             setNotice("OTP đổi email đã được gửi tới địa chỉ mới.");
-            setView("confirm-email");
+            if (view !== "overview") {
+                setView("confirm-email");
+            }
         } catch (nextError) {
             setError(getApiErrorMessage(nextError));
         } finally {
@@ -1811,6 +1816,7 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
 
         try {
             await authActions.confirmEmailChange({ otp });
+            setNewEmail("");
             setOtp("");
             setNotice("Email đăng nhập đã được cập nhật.");
             setView("overview");
@@ -1827,6 +1833,7 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
 
         try {
             await authActions.cancelPendingEmailChange();
+            setNewEmail("");
             setNotice("Đã hủy yêu cầu đổi email.");
             setOtp("");
             setView("overview");
@@ -1893,7 +1900,7 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                     <strong>Email chưa xác thực.</strong>
                     <span>Bạn vẫn có thể dùng plugin, nhưng nên xác thực email để tăng độ tin cậy của tài khoản.</span>
                     <div className="modal-actions">
-                        <button className="btn primary" onClick={() => setView("verify-email")}>
+                        <button className="btn primary" onClick={handleSendVerifyOtp} disabled={submitting}>
                             Xác thực ngay
                         </button>
                         <button className="btn" onClick={handleSendVerifyOtp} disabled={submitting}>
@@ -1921,7 +1928,7 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
             {notice ? <div className="success-banner">{notice}</div> : null}
             <InlineError message={error} />
 
-            <div className="summary-grid">
+            <div className="account-summary-stack">
                 <div className="summary-tile">
                     <span className="summary-label">Plan hiện tại</span>
                     <strong>{summaries.planSummary.name}</strong>
@@ -1934,7 +1941,7 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                 </div>
             </div>
 
-            <div className="summary-grid">
+            <div className="account-summary-stack">
                 <div className="summary-tile">
                     <span className="summary-label">Email</span>
                     <strong>{userProfile.email}</strong>
@@ -1957,17 +1964,148 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                 </div>
             </div>
 
-            <div className="account-action-grid">
-                <button className="btn primary" onClick={() => setView("edit-profile")}>
-                    Chỉnh sửa thông tin
-                </button>
-                <button className="btn" onClick={() => setView("change-email")}>
-                    Đổi email
-                </button>
-                <button className="btn" onClick={() => setView("change-password")}>
-                    Đổi mật khẩu
-                </button>
-                <button className="btn" onClick={onOpenCreditSubscription}>
+            <div className="account-management-stack">
+                <div className="auth-form-card">
+                    <div className="account-section-copy">
+                        <span className="pill-tag">Hồ sơ</span>
+                        <h3>Cập nhật tên hiển thị</h3>
+                        <p>Tên này sẽ phản ánh lại ở header và phần tóm tắt tài khoản ngay sau khi lưu.</p>
+                    </div>
+                    <FormField
+                        label="Tên hiển thị"
+                        value={displayName}
+                        onChange={setDisplayName}
+                        placeholder="Nhập tên hiển thị"
+                        disabled={submitting}
+                    />
+                    <div className="modal-actions">
+                        <button className="btn primary" onClick={handleSaveDisplayName} disabled={submitting}>
+                            {submitting ? "Đang lưu..." : "Lưu tên hiển thị"}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="auth-form-card">
+                    <div className="account-section-copy">
+                        <span className="pill-tag">Email</span>
+                        <h3>Xác thực và đổi email</h3>
+                        <p>Email cũ vẫn là địa chỉ đăng nhập chính cho tới khi OTP của email mới được xác nhận thành công.</p>
+                    </div>
+
+                    <div className="account-detail-card account-inline-summary">
+                        <span className="summary-label">Email hiện tại</span>
+                        <strong>{userProfile.email}</strong>
+                        <span>
+                            {userProfile.pendingEmail
+                                ? `Đang chờ đổi sang ${userProfile.pendingEmail}`
+                                : `Trạng thái hiện tại: ${getEmailStatusLabel(userProfile.emailVerificationStatus)}`}
+                        </span>
+                    </div>
+
+                    {userProfile.emailVerificationStatus === "unverified" ? (
+                        <>
+                            <FormField
+                                label="OTP xác thực email hiện tại"
+                                value={otp}
+                                onChange={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
+                                placeholder="Nhập 6 số"
+                                maxLength={6}
+                                autoComplete="one-time-code"
+                                disabled={submitting}
+                            />
+                            <div className="modal-actions">
+                                <button className="btn primary" onClick={handleVerifyCurrentEmail} disabled={submitting}>
+                                    {submitting ? "Đang xác thực..." : "Xác thực email"}
+                                </button>
+                                <button className="btn" onClick={handleSendVerifyOtp} disabled={submitting}>
+                                    Gửi lại OTP
+                                </button>
+                            </div>
+                        </>
+                    ) : null}
+
+                    <FormField
+                        label="Email mới"
+                        value={newEmail}
+                        onChange={setNewEmail}
+                        placeholder="new@example.com"
+                        autoComplete="email"
+                        disabled={submitting}
+                    />
+                    <div className="modal-actions">
+                        <button className="btn primary" onClick={handleStartEmailChange} disabled={submitting}>
+                            {submitting ? "Đang gửi OTP..." : "Gửi OTP đổi email"}
+                        </button>
+                        {userProfile.pendingEmail ? (
+                            <button className="btn subtle" onClick={handleCancelPendingEmail} disabled={submitting}>
+                                Hủy yêu cầu đổi email
+                            </button>
+                        ) : null}
+                    </div>
+
+                    {userProfile.pendingEmail ? (
+                        <>
+                            <FormField
+                                label="OTP email mới"
+                                value={otp}
+                                onChange={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
+                                placeholder="Nhập 6 số"
+                                autoComplete="one-time-code"
+                                maxLength={6}
+                                disabled={submitting}
+                            />
+                            <div className="modal-actions">
+                                <button className="btn primary" onClick={handleConfirmEmailChange} disabled={submitting}>
+                                    {submitting ? "Đang xác thực..." : "Xác nhận email mới"}
+                                </button>
+                                <button className="btn" onClick={handleResendPendingEmailOtp} disabled={submitting}>
+                                    Gửi lại OTP
+                                </button>
+                            </div>
+                        </>
+                    ) : null}
+                </div>
+
+                <div className="auth-form-card">
+                    <div className="account-section-copy">
+                        <span className="pill-tag">Bảo mật</span>
+                        <h3>Đổi mật khẩu</h3>
+                        <p>Session hiện tại vẫn được giữ nguyên sau khi đổi mật khẩu thành công.</p>
+                    </div>
+                    <PasswordField
+                        label="Mật khẩu hiện tại"
+                        value={currentPassword}
+                        onChange={setCurrentPassword}
+                        autoComplete="current-password"
+                        placeholder="Nhập mật khẩu hiện tại"
+                        disabled={submitting}
+                    />
+                    <PasswordField
+                        label="Mật khẩu mới"
+                        value={newPassword}
+                        onChange={setNewPassword}
+                        autoComplete="new-password"
+                        placeholder="Tối thiểu 8 ký tự"
+                        disabled={submitting}
+                    />
+                    <PasswordField
+                        label="Xác nhận mật khẩu mới"
+                        value={confirmPassword}
+                        onChange={setConfirmPassword}
+                        autoComplete="new-password"
+                        placeholder="Nhập lại mật khẩu mới"
+                        disabled={submitting}
+                    />
+                    <div className="modal-actions">
+                        <button className="btn primary" onClick={handleChangePassword} disabled={submitting}>
+                            {submitting ? "Đang lưu..." : "Đổi mật khẩu"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="account-action-stack">
+                <button className="btn primary" onClick={onOpenCreditSubscription}>
                     Xem Credit & Subscription
                 </button>
                 <button className="btn" onClick={onOpenPurchase}>

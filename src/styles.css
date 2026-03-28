@@ -2117,6 +2117,20 @@ input:checked + .slider:before {
     gap: 12px;
 }
 
+.account-management-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+}
+
+.account-summary-stack,
+.account-management-stack,
+.account-action-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
 .summary-tile {
     display: flex;
     flex-direction: column;
@@ -2149,10 +2163,36 @@ input:checked + .slider:before {
     gap: 10px;
 }
 
+.account-action-stack .btn {
+    width: 100%;
+}
+
+.account-section-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.account-section-copy h3 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.account-section-copy p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.6;
+}
+
 .account-detail-card {
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+.account-inline-summary {
+    min-height: 92px;
 }
 
 .account-detail-card strong {
