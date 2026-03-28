@@ -188,7 +188,7 @@ body {
     min-width: 220px;
     max-width: calc(100% - 32px);
     padding: 10px 14px;
-    border-radius: 999px;
+    border-radius: 14px;
     border: 1px solid rgba(255, 179, 0, 0.16);
     background: rgba(18, 18, 18, 0.94);
     box-shadow: 0 16px 28px rgba(0, 0, 0, 0.35);
@@ -704,7 +704,7 @@ body {
     align-items: center;
     min-height: 28px;
     padding: 0 10px;
-    border-radius: 999px;
+    border-radius: 14px;
     font-size: 11px;
     line-height: 1;
     white-space: nowrap;
@@ -1246,7 +1246,7 @@ body {
     display: inline-flex;
     align-self: flex-start;
     padding: 5px 10px;
-    border-radius: 999px;
+    border-radius: 14px;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -1360,7 +1360,7 @@ body {
     height: 18px;
     margin: 4px;
     padding: 0 4px;
-    border-radius: 999px;
+    border-radius: 14px;
     background: rgba(20, 20, 20, 0.78);
     color: #fff1b8;
     font-size: 10px;
@@ -1419,7 +1419,7 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-muted);
-    border-radius: 999px;
+    border-radius: 14px;
     padding: 6px 10px;
     font-size: 10px;
     font-weight: 600;
@@ -1559,7 +1559,7 @@ body {
   background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
   transition: all 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
-  border-radius: 999px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
       inset 0 1px 3px rgba(0, 0, 0, 0.26),
@@ -1872,7 +1872,7 @@ input:checked + .slider:before {
     padding: 0 10px;
     height: 30px;
     gap: 6px;
-    border-radius: 999px;
+    border-radius: 14px;
     background: rgba(255, 255, 255, 0.06);
     border-color: rgba(255, 255, 255, 0.1);
     color: var(--text-main);
@@ -1887,8 +1887,11 @@ input:checked + .slider:before {
 
 .modal-stack {
     display: flex;
-    flex-direction: column;
-    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.modal-stack > *:not(:last-child) {
+  margin: 8px;
 }
 
 .info-banner {
@@ -1905,8 +1908,7 @@ input:checked + .slider:before {
     display: inline-flex;
     align-items: center;
     padding: 4px 8px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
     color: var(--primary-color);
     font-size: 10px;
     font-weight: 700;
@@ -2103,6 +2105,10 @@ input:checked + .slider:before {
     box-shadow: 0 26px 72px rgba(0, 0, 0, 0.55);
 }
 
+.account-modal-body {
+   gap: 10px;
+}
+
 .purchase-modal-card {
     width: min(760px, 100%);
 }
@@ -2128,7 +2134,10 @@ input:checked + .slider:before {
 .account-action-stack {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+}
+
+.account-management-stack > *:not(:last-child) {
+  margin-bottom: 10px;
 }
 
 .summary-tile {
@@ -2350,7 +2359,7 @@ input:checked + .slider:before {
     justify-content: center;
     width: 22px;
     height: 22px;
-    border-radius: 999px;
+    border-radius: 14px;
     background: rgba(255, 255, 255, 0.05);
     font-size: 11px;
     font-weight: 700;
@@ -2432,7 +2441,7 @@ input:checked + .slider:before {
     display: inline-flex;
     align-items: center;
     padding: 6px 10px;
-    border-radius: 999px;
+    border-radius: 14px;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -2932,7 +2941,7 @@ input:checked + .slider:before {
     min-width: 180px;
     max-width: calc(100% - 32px);
     padding: 10px 14px;
-    border-radius: 999px;
+    border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(18, 18, 18, 0.94);
     color: var(--text-main);

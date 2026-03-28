@@ -373,7 +373,6 @@ const AuthModal = ({ config, authActions, onClose }) => {
             subtitle={subtitleMap[view]}
             onClose={onClose}
             canClose={true}
-            cardClassName="purchase-modal-card"
             backdropClassName="auth-modal-backdrop"
             cardClassName="auth-modal-card"
             bodyClassName="auth-modal-body"
@@ -1928,7 +1927,6 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
             {notice ? <div className="success-banner">{notice}</div> : null}
             <InlineError message={error} />
 
-            <div className="account-summary-stack">
                 <div className="summary-tile">
                     <span className="summary-label">Plan hiện tại</span>
                     <strong>{summaries.planSummary.name}</strong>
@@ -1939,9 +1937,7 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                     <strong>{summaries.creditSummary.label}</strong>
                     <span>{summaries.creditSummary.detail}</span>
                 </div>
-            </div>
 
-            <div className="account-summary-stack">
                 <div className="summary-tile">
                     <span className="summary-label">Email</span>
                     <strong>{userProfile.email}</strong>
@@ -1957,12 +1953,6 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                     <strong>{getEmailStatusLabel(userProfile.emailVerificationStatus)}</strong>
                     <span>{userProfile.emailVerified ? "Đã xác thực" : "Chưa xác thực"}</span>
                 </div>
-                <div className="summary-tile">
-                    <span className="summary-label">Lần đăng nhập gần nhất</span>
-                    <strong>{helpers.formatRelativeDate(userProfile.lastLoginAt)}</strong>
-                    <span>Tạo lúc {helpers.formatRelativeDate(userProfile.createdAt)}</span>
-                </div>
-            </div>
 
             <div className="account-management-stack">
                 <div className="auth-form-card">
