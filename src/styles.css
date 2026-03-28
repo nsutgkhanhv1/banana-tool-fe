@@ -27,6 +27,7 @@
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --transition-speed: 0.12s; 
     --transition-slow: 0.25s; 
+    --accent-cyan: #33CCFF;
 }
 
 body {
@@ -454,66 +455,79 @@ body {
 }
 
 .prompt-accordion {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.025);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0;
+    background: transparent;
     overflow: hidden;
 }
 
 .prompt-accordion.open {
-    border-color: rgba(255, 179, 0, 0.18);
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .prompt-accordion-trigger {
     width: 100%;
     border: none;
     background: transparent;
-    color: inherit;
+    color: var(--text-main);
+    display: flex;
+    align-items: start;
+    justify-content: start;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 10px 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.prompt-accordion-trigger:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.prompt-indicator-triangle {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #00A3FF;
+    transform: rotate(-90deg);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+
+.prompt-accordion.open .prompt-indicator-triangle {
+    transform: rotate(0deg);
+}
+
+.prompt-accordion-icon {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    cursor: pointer;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
 }
 
 .prompt-accordion-copy {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+    align-items: start;
+    gap: 8px;
+    flex: 1;
 }
 
 .prompt-accordion-title {
-    color: var(--text-main);
-    font-size: 12px;
-    font-weight: 700;
+    color: var(--accent-cyan);
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .prompt-accordion-selected {
-    color: var(--text-dim);
-    font-size: 11px;
-}
-
-.prompt-accordion-selected.active {
-    color: #ffd46b;
-}
-
-.prompt-accordion-chevron {
-    color: var(--text-dim);
-    transition: transform var(--transition-speed), color var(--transition-speed);
-    flex-shrink: 0;
-}
-
-.prompt-accordion-chevron.open {
-    transform: rotate(180deg);
-    color: #ffd46b;
+    display: none;
 }
 
 .prompt-accordion-panel {
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 12px 14px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    padding: 12px 0 14px 28px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -529,7 +543,7 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.04);
     color: var(--text-muted);
-    border-radius: 999px;
+    border-radius: 30px;
     padding: 7px 10px;
     font-size: 11px;
     font-weight: 600;
@@ -544,9 +558,9 @@ body {
 
 .prompt-option-chip.active {
     color: var(--primary-text);
-    border-color: rgba(255, 179, 0, 0.42);
-    background: rgba(255, 179, 0, 0.18);
-    box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.18);
+    border-color: black;
+    background: var(--primary-color);
+    box-shadow: inset 0 0 0 1px black;
 }
 
 .prompt-option-note,
