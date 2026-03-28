@@ -29,6 +29,227 @@ const REPLACEMENT_STRENGTH_OPTIONS = [
     { id: 'high', label: 'Mạnh' }
 ];
 
+const PROMPT_ENHANCER_GROUPS = [
+    {
+        id: 'concept',
+        label: 'Gợi ý concept',
+        options: [
+            {
+                id: 'editorial-luxury',
+                label: 'Editorial luxury',
+                promptText: 'Concept editorial luxury, tối giản nhưng cao cấp, bố cục gọn gàng, cảm giác như ảnh campaign cho thương hiệu premium.'
+            },
+            {
+                id: 'quiet-luxury',
+                label: 'Quiet luxury',
+                promptText: 'Concept quiet luxury đang phổ biến, tinh tế, vật liệu sang trọng, ít chi tiết thừa, nhấn vào cảm giác đắt giá và thanh lịch.'
+            },
+            {
+                id: 'lifestyle-social',
+                label: 'Lifestyle social',
+                promptText: 'Concept lifestyle hiện đại kiểu social content, bối cảnh đời sống được dàn dựng đẹp mắt, tự nhiên nhưng vẫn có chủ đích thương mại.'
+            },
+            {
+                id: 'neo-futuristic',
+                label: 'Neo futuristic',
+                promptText: 'Concept neo futuristic, không gian sạch, hơi hướng công nghệ, bề mặt phản xạ nhẹ, hiện đại và nổi bật chủ thể.'
+            },
+            {
+                id: 'seasonal-campaign',
+                label: 'Seasonal campaign',
+                promptText: 'Concept campaign theo mùa đang thịnh hành, bắt mắt, hợp xu hướng thị giác mạng xã hội nhưng vẫn giữ cảm giác chuyên nghiệp.'
+            }
+        ]
+    },
+    {
+        id: 'lighting',
+        label: 'Ánh sáng',
+        options: [
+            {
+                id: 'soft-studio',
+                label: 'Soft studio',
+                promptText: 'Ánh sáng studio mềm, đều, chuyển sáng mượt, sạch và tôn chi tiết chủ thể một cách tự nhiên.'
+            },
+            {
+                id: 'golden-hour',
+                label: 'Golden hour',
+                promptText: 'Ánh sáng golden hour ấm áp, dịu, có chiều sâu, tạo cảm giác dễ chịu và cao cấp.'
+            },
+            {
+                id: 'high-key',
+                label: 'High-key clean',
+                promptText: 'Ánh sáng high-key sáng sạch, nền thoáng, độ tương phản vừa phải, cảm giác tươi và thương mại.'
+            },
+            {
+                id: 'cinematic-moody',
+                label: 'Cinematic moody',
+                promptText: 'Ánh sáng cinematic moody, tương phản có kiểm soát, tạo chiều sâu và điểm nhấn thị giác rõ ràng.'
+            },
+            {
+                id: 'rim-light',
+                label: 'Rim light',
+                promptText: 'Bổ sung rim light nhẹ để tách chủ thể khỏi nền, tăng độ nổi bật mà vẫn tự nhiên.'
+            }
+        ]
+    },
+    {
+        id: 'camera',
+        label: 'Góc chụp, khẩu độ',
+        options: [
+            {
+                id: 'eye-level-50mm',
+                label: 'Chính diện 50mm',
+                promptText: 'Góc chụp chính diện hoặc ngang tầm mắt, cảm giác cân đối, mô phỏng ống kính 50mm với chiều sâu tự nhiên.'
+            },
+            {
+                id: 'hero-45deg',
+                label: 'Hero 45 độ',
+                promptText: 'Góc hero 45 độ, tôn khối chủ thể, bố cục quảng cáo rõ ràng, độ sâu trường ảnh vừa phải.'
+            },
+            {
+                id: 'low-angle-35mm',
+                label: 'Low angle 35mm',
+                promptText: 'Góc chụp thấp nhẹ kiểu 35mm để chủ thể trông nổi bật hơn, có chiều sâu và cảm giác mạnh mẽ.'
+            },
+            {
+                id: 'top-down-f8',
+                label: 'Top-down f/8',
+                promptText: 'Góc chụp từ trên xuống gọn gàng, bố cục rõ, khẩu độ kiểu f/8 để giữ nhiều chi tiết sắc nét trong khung.'
+            },
+            {
+                id: 'closeup-f28',
+                label: 'Cận cảnh f/2.8',
+                promptText: 'Góc cận cảnh với độ sâu trường ảnh nông kiểu f/2.8, hậu cảnh mềm, nhấn mạnh chủ thể chính.'
+            }
+        ]
+    },
+    {
+        id: 'foreground',
+        label: 'Thêm tiền cảnh',
+        options: [
+            {
+                id: 'soft-bokeh',
+                label: 'Bokeh mềm',
+                promptText: 'Thêm lớp tiền cảnh mờ nhẹ dạng bokeh để khung hình có chiều sâu nhưng không che chủ thể.'
+            },
+            {
+                id: 'leaf-blur',
+                label: 'Lá mờ tự nhiên',
+                promptText: 'Thêm tiền cảnh lá hoặc nhánh cây out-focus rất nhẹ, tạo cảm giác tự nhiên và sống động.'
+            },
+            {
+                id: 'glass-reflection',
+                label: 'Phản xạ kính',
+                promptText: 'Thêm tiền cảnh phản xạ kính hoặc lớp flare rất nhẹ để ảnh hiện đại và có chiều sâu thị giác.'
+            },
+            {
+                id: 'mist-layer',
+                label: 'Sương mỏng',
+                promptText: 'Thêm lớp sương mỏng hoặc haze nhẹ ở tiền cảnh để ảnh mềm hơn và có cảm giác không gian.'
+            },
+            {
+                id: 'minimal-props',
+                label: 'Đạo cụ tối giản',
+                promptText: 'Thêm vài đạo cụ tối giản ở tiền cảnh, bố trí tiết chế, hỗ trợ kể câu chuyện mà không làm rối ảnh.'
+            }
+        ]
+    },
+    {
+        id: 'color',
+        label: 'Đồng bộ màu sắc',
+        options: [
+            {
+                id: 'warm-neutral',
+                label: 'Warm neutral',
+                promptText: 'Đồng bộ màu theo tone warm neutral, hài hòa, dễ dùng, sạch và hiện đại.'
+            },
+            {
+                id: 'beige-premium',
+                label: 'Beige premium',
+                promptText: 'Đồng bộ màu be kem cao cấp, dịu mắt, sang trọng, phù hợp phong cách premium.'
+            },
+            {
+                id: 'fresh-natural',
+                label: 'Fresh natural',
+                promptText: 'Đồng bộ màu tự nhiên tươi sáng, cân bằng xanh lá và trung tính, tạo cảm giác trong trẻo.'
+            },
+            {
+                id: 'cinematic-subtle',
+                label: 'Cinematic subtle',
+                promptText: 'Đồng bộ màu cinematic nhẹ, có tương phản màu tinh tế, ấn tượng nhưng không gắt.'
+            },
+            {
+                id: 'monochrome-luxe',
+                label: 'Monochrome luxe',
+                promptText: 'Đồng bộ màu đơn sắc cao cấp theo dải xám hoặc than chì, sang và gọn.'
+            }
+        ]
+    }
+];
+const PROMPT_ENHANCER_GROUP_MAP = PROMPT_ENHANCER_GROUPS.reduce((map, group) => {
+    map[group.id] = group;
+    return map;
+}, {});
+
+const createEmptyPromptEnhancers = () =>
+    PROMPT_ENHANCER_GROUPS.reduce((state, group) => {
+        state[group.id] = '';
+        return state;
+    }, {});
+
+const createInitialAccordionState = () =>
+    PROMPT_ENHANCER_GROUPS.reduce((state, group, index) => {
+        state[group.id] = index === 0;
+        return state;
+    }, {});
+
+const normalizePromptEnhancers = (value) => {
+    const normalized = createEmptyPromptEnhancers();
+
+    if (!value || typeof value !== 'object') {
+        return normalized;
+    }
+
+    PROMPT_ENHANCER_GROUPS.forEach((group) => {
+        const nextValue = typeof value[group.id] === 'string' ? value[group.id] : '';
+        normalized[group.id] = group.options.some((option) => option.id === nextValue) ? nextValue : '';
+    });
+
+    return normalized;
+};
+
+const normalizeSavedPrompt = (entry) => ({
+    name: entry?.name || entry?.memo || '',
+    prompt: entry?.prompt || entry?.text || '',
+    allowFreeZoom: Boolean(entry?.allowFreeZoom),
+    promptEnhancers: normalizePromptEnhancers(entry?.promptEnhancers)
+});
+
+const getPromptEnhancerOption = (groupId, optionId) => {
+    if (!groupId || !optionId) {
+        return null;
+    }
+
+    return PROMPT_ENHANCER_GROUP_MAP[groupId]?.options.find((option) => option.id === optionId) || null;
+};
+
+const buildPromptEnhancerFragments = ({ allowFreeZoom, promptEnhancers }) => {
+    const fragments = [];
+
+    if (allowFreeZoom) {
+        fragments.push('Cho phép tự do thu phóng và crop lại bố cục khi cần để cân đối khung hình, ưu tiên giữ chủ thể nổi bật và tự nhiên.');
+    }
+
+    PROMPT_ENHANCER_GROUPS.forEach((group) => {
+        const selectedOption = getPromptEnhancerOption(group.id, promptEnhancers[group.id]);
+        if (selectedOption?.promptText) {
+            fragments.push(selectedOption.promptText);
+        }
+    });
+
+    return fragments;
+};
+
 const mapSourceTypeToApiSource = (sourceType) => {
     if (sourceType === 'quick_layer_canvas') {
         return 'photoshop-composite';
@@ -98,6 +319,9 @@ export const ThayNenTab = ({
     const [size, setSize] = useState('1K');
     const [backgroundPreset, setBackgroundPreset] = useState('studio');
     const [prompt, setPrompt] = useState('');
+    const [allowFreeZoom, setAllowFreeZoom] = useState(false);
+    const [promptEnhancers, setPromptEnhancers] = useState(() => createEmptyPromptEnhancers());
+    const [openPromptSections, setOpenPromptSections] = useState(() => createInitialAccordionState());
     const [keepSubject, setKeepSubject] = useState(true);
     const [matchLighting, setMatchLighting] = useState(true);
     const [replacementStrength, setReplacementStrength] = useState('medium');
@@ -112,14 +336,15 @@ export const ThayNenTab = ({
     const [savedPrompts, setSavedPrompts] = useState(() => {
         try {
             const savedNew = localStorage.getItem('banana_saved_prompts_thaynen');
-            if (savedNew) return JSON.parse(savedNew);
+            if (savedNew) {
+                return JSON.parse(savedNew).map(normalizeSavedPrompt).filter((item) => item.name);
+            }
             
             const savedOld = localStorage.getItem('banana_saved_prompts');
             if (savedOld) {
-                const migrated = JSON.parse(savedOld).map(p => ({
-                    name: p.memo || p.name,
-                    prompt: p.text || p.prompt
-                }));
+                const migrated = JSON.parse(savedOld)
+                    .map(normalizeSavedPrompt)
+                    .filter((item) => item.name);
                 localStorage.setItem('banana_saved_prompts_thaynen', JSON.stringify(migrated));
                 return migrated;
             }
@@ -152,6 +377,30 @@ export const ThayNenTab = ({
 
     const activeImage = useMemo(() => items.find((image) => image.id === activeImageId) || null, [activeImageId, items]);
     const canSubmit = Boolean(activeImage);
+    const promptEnhancerFragments = useMemo(
+        () => buildPromptEnhancerFragments({ allowFreeZoom, promptEnhancers }),
+        [allowFreeZoom, promptEnhancers]
+    );
+    const finalPrompt = useMemo(
+        () => [prompt.trim(), ...promptEnhancerFragments].filter(Boolean).join('\n'),
+        [prompt, promptEnhancerFragments]
+    );
+    const selectedPromptEnhancerSummaries = useMemo(
+        () =>
+            PROMPT_ENHANCER_GROUPS.map((group) => {
+                const selectedOption = getPromptEnhancerOption(group.id, promptEnhancers[group.id]);
+                if (!selectedOption) {
+                    return null;
+                }
+
+                return {
+                    groupId: group.id,
+                    groupLabel: group.label,
+                    optionLabel: selectedOption.label
+                };
+            }).filter(Boolean),
+        [promptEnhancers]
+    );
 
     useEffect(() => {
         const handlePaste = async (event) => {
@@ -213,13 +462,13 @@ export const ThayNenTab = ({
             setSize(payload.size || '1K');
             setBackgroundPreset(payload.backgroundPreset || 'studio');
             setPrompt(payload.prompt || '');
+            setAllowFreeZoom(Boolean(payload.allowFreeZoom));
+            setPromptEnhancers(normalizePromptEnhancers(payload.promptEnhancers));
             setKeepSubject(typeof payload.keepSubject === 'boolean' ? payload.keepSubject : true);
             setMatchLighting(typeof payload.matchLighting === 'boolean' ? payload.matchLighting : true);
             setReplacementStrength(payload.replacementStrength || 'medium');
             setShowQuickLayerOptions(false);
-            const restoredRepairMask = sanitizeRepairMask(payload.repairMask);
-            setRepairMask(restoredRepairMask);
-            setShowMaskEditor(Boolean(restoredRepairMask));
+            setOpenPromptSections(createInitialAccordionState());
 
             const restored = await restoreFromSnapshots({
                 snapshots: payload.referenceImages || [],
@@ -255,11 +504,10 @@ export const ThayNenTab = ({
             ratio: aspectRatio,
             size,
             preset: backgroundPreset,
-            prompt: prompt.trim(),
+            prompt: finalPrompt.trim(),
             keepSubject,
             matchLighting,
             replacementStrength,
-            ...(repairMask ? { repairMask } : {}),
             clientRequestId: `thay-nen-${Date.now()}`,
             appVersion: 'uxp-dev'
         };
@@ -276,12 +524,6 @@ export const ThayNenTab = ({
         setIsLoading(true);
 
         try {
-            const repairMaskError = validateRepairMask(repairMask);
-
-            if (repairMaskError) {
-                throw new Error(repairMaskError);
-            }
-
             const payload = createGeneratePayload();
             const insertContext = await captureDocumentInsertContextSafely({
                 fallbackMessage: 'Không thể capture Photoshop context tại thời điểm submit.'
@@ -337,19 +579,21 @@ export const ThayNenTab = ({
                         aspectRatio: payload.ratio,
                         size: payload.size,
                         preset: payload.preset,
+                        allowFreeZoom,
+                        promptEnhancers,
                         keepSubject: payload.keepSubject,
                         matchLighting: payload.matchLighting,
-                        replacementStrength: payload.replacementStrength,
-                        repairMask: payload.repairMask || null
+                        replacementStrength: payload.replacementStrength
                     },
                     summaryLines: [
+                        ...(allowFreeZoom ? ['Tự do thu phóng: Bật'] : []),
+                        ...selectedPromptEnhancerSummaries.map((item) => `${item.groupLabel}: ${item.optionLabel}`),
                         `Preset: ${BACKGROUND_PRESETS.find((preset) => preset.id === payload.preset)?.label || payload.preset}`,
                         `Tỉ lệ: ${payload.ratio}`,
                         `Kích thước: ${payload.size}`,
                         `Giữ chủ thể: ${payload.keepSubject ? 'Bật' : 'Tắt'}`,
                         `Khớp ánh sáng: ${payload.matchLighting ? 'Bật' : 'Tắt'}`,
-                        `Độ mạnh thay nền: ${REPLACEMENT_STRENGTH_OPTIONS.find((option) => option.id === payload.replacementStrength)?.label || payload.replacementStrength}`,
-                        `Mask chủ thể: ${payload.repairMask ? 'Đã chỉnh' : 'Tự động'}`
+                        `Độ mạnh thay nền: ${REPLACEMENT_STRENGTH_OPTIONS.find((option) => option.id === payload.replacementStrength)?.label || payload.replacementStrength}`
                     ],
                     errorSummary: insertState.error || '',
                     capturedContext: insertContext.context,
@@ -366,11 +610,12 @@ export const ThayNenTab = ({
                         aspectRatio: payload.ratio,
                         size: payload.size,
                         backgroundPreset: payload.preset,
-                        prompt: payload.prompt,
+                        prompt,
+                        allowFreeZoom,
+                        promptEnhancers,
                         keepSubject: payload.keepSubject,
                         matchLighting: payload.matchLighting,
                         replacementStrength: payload.replacementStrength,
-                        repairMask: payload.repairMask || null,
                         activeImageId,
                         referenceImages: items.map((image) => ({
                             id: image.id,
@@ -453,8 +698,6 @@ export const ThayNenTab = ({
 
         try {
             await addFromFileEntry();
-            setRepairMask(null);
-            setShowMaskEditor(false);
         } catch (error) {
             setErrorMessage(error && error.message ? error.message : 'KhÃ´ng thá»ƒ Ä‘á»c áº£nh Ä‘áº§u vÃ o tá»« mÃ¡y.');
         }
@@ -476,8 +719,6 @@ export const ThayNenTab = ({
         try {
             await addFromQuickLayer(mode);
             setShowQuickLayerOptions(false);
-            setRepairMask(null);
-            setShowMaskEditor(false);
         } catch (error) {
             setErrorMessage(error && error.message ? error.message : 'KhÃ´ng thá»ƒ láº¥y áº£nh tá»« Photoshop.');
         } finally {
@@ -500,12 +741,20 @@ export const ThayNenTab = ({
     };
 
     const handleSavePrompt = () => {
-        if (!prompt.trim()) {
+        if (!prompt.trim() && !promptEnhancerFragments.length) {
             setErrorMessage('Vui lòng nhập prompt trước khi lưu.');
             return;
         }
         const name = memoName.trim() || `Prompt ${new Date().toLocaleString()}`;
-        const newSaved = [...savedPrompts.filter(p => p.name !== name), { name, prompt: prompt.trim() }];
+        const newSaved = [
+            ...savedPrompts.filter((p) => p.name !== name),
+            {
+                name,
+                prompt: prompt.trim(),
+                allowFreeZoom,
+                promptEnhancers
+            }
+        ];
         setSavedPrompts(newSaved);
         setMemoName(name);
         setHistoryNotice('Đã lưu cấu hình prompt thành công.');
@@ -519,10 +768,14 @@ export const ThayNenTab = ({
     };
 
     const handleLoadSavedPrompt = (name) => {
-        const selected = savedPrompts.find(p => p.name === name);
+        const selected = savedPrompts.find((p) => p.name === name);
         if (selected) {
             setPrompt(selected.prompt);
             setMemoName(selected.name);
+            setAllowFreeZoom(Boolean(selected.allowFreeZoom));
+            setPromptEnhancers(normalizePromptEnhancers(selected.promptEnhancers));
+        } else {
+            setMemoName(name);
         }
     };
 
@@ -555,10 +808,12 @@ export const ThayNenTab = ({
                     preset: backgroundPreset,
                     ratio: aspectRatio,
                     size,
+                    allowFreeZoom,
+                    promptEnhancers,
+                    finalPrompt,
                     keepSubject,
                     matchLighting,
-                    replacementStrength,
-                    hasRepairMask: Boolean(repairMask)
+                    replacementStrength
                 },
                 clientRequestId: `thay-nen-optimize-${Date.now()}`,
                 appVersion: 'uxp-dev'
@@ -585,8 +840,20 @@ export const ThayNenTab = ({
         event.stopPropagation();
         setErrorMessage('');
         removeImage(imageId);
-        setRepairMask(null);
-        setShowMaskEditor(false);
+    };
+
+    const handleTogglePromptSection = (groupId) => {
+        setOpenPromptSections((current) => ({
+            ...current,
+            [groupId]: !current[groupId]
+        }));
+    };
+
+    const handleSelectPromptEnhancer = (groupId, optionId) => {
+        setPromptEnhancers((current) => ({
+            ...current,
+            [groupId]: current[groupId] === optionId ? '' : optionId
+        }));
     };
 
     return (
@@ -766,6 +1033,84 @@ export const ThayNenTab = ({
                             maxLength={500}
                         ></textarea>
                         <div className="prompt-char-count">{prompt.length}/500</div>
+                    </div>
+
+                    <div className="prompt-enhancer-stack">
+                        <div className="switch-row prompt-enhancer-zoom-row">
+                            <div>
+                                <div className="switch-label">Tự do thu phóng</div>
+                                <div className="prompt-enhancer-helper">
+                                    Cho phép AI crop và zoom linh hoạt để nền mới cân đối hơn mà vẫn giữ chủ thể tự nhiên.
+                                </div>
+                            </div>
+                            <label className="switch">
+                                <input type="checkbox" checked={allowFreeZoom} onChange={(e) => setAllowFreeZoom(e.target.checked)} />
+                                <span className="slider"></span>
+                            </label>
+                        </div>
+
+                        {PROMPT_ENHANCER_GROUPS.map((group) => {
+                            const isOpen = Boolean(openPromptSections[group.id]);
+                            const selectedOption = getPromptEnhancerOption(group.id, promptEnhancers[group.id]);
+
+                            return (
+                                <div key={group.id} className={`prompt-accordion ${isOpen ? 'open' : ''}`}>
+                                    <button
+                                        className="prompt-accordion-trigger"
+                                        type="button"
+                                        onClick={() => handleTogglePromptSection(group.id)}
+                                    >
+                                        <div className="prompt-accordion-copy">
+                                            <span className="prompt-accordion-title">{group.label}</span>
+                                            <span className={`prompt-accordion-selected ${selectedOption ? 'active' : ''}`}>
+                                                {selectedOption ? selectedOption.label : 'Chưa chọn'}
+                                            </span>
+                                        </div>
+                                        <svg
+                                            className={`prompt-accordion-chevron ${isOpen ? 'open' : ''}`}
+                                            width="14"
+                                            height="14"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                        >
+                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                        </svg>
+                                    </button>
+
+                                    {isOpen ? (
+                                        <div className="prompt-accordion-panel">
+                                            <div className="prompt-option-grid">
+                                                {group.options.map((option) => (
+                                                    <button
+                                                        key={option.id}
+                                                        type="button"
+                                                        className={`prompt-option-chip ${selectedOption?.id === option.id ? 'active' : ''}`}
+                                                        onClick={() => handleSelectPromptEnhancer(group.id, option.id)}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <div className="prompt-option-note">
+                                                {selectedOption
+                                                    ? selectedOption.promptText
+                                                    : 'Chọn một option để hệ thống tự thêm mô tả phù hợp vào prompt khi generate.'}
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            );
+                        })}
+
+                        {(allowFreeZoom || selectedPromptEnhancerSummaries.length > 0) ? (
+                            <div className="prompt-assembly-note">
+                                Prompt gửi AI sẽ tự ghép các lựa chọn này khi generate để mô tả rõ hơn về concept, ánh sáng, góc chụp và màu sắc.
+                            </div>
+                        ) : null}
                     </div>
                     
                     <div className="prompt-footer-row">

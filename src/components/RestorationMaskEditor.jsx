@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 const MASK_EXPORT_SIZE = 512;
+const MASK_PREVIEW_COLOR = 'rgba(255, 179, 0, 0.9)';
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -33,11 +34,13 @@ const hasVisibleMask = (canvas) => {
 const drawStroke = (context, fromPoint, toPoint, brushSize, tool) => {
     context.save();
     context.globalCompositeOperation = tool === 'erase' ? 'destination-out' : 'source-over';
-    context.strokeStyle = 'rgba(255, 179, 0, 0.72)';
-    context.fillStyle = 'rgba(255, 179, 0, 0.72)';
+    context.strokeStyle = MASK_PREVIEW_COLOR;
+    context.fillStyle = MASK_PREVIEW_COLOR;
     context.lineWidth = brushSize;
     context.lineCap = 'round';
     context.lineJoin = 'round';
+    context.shadowColor = 'rgba(255, 179, 0, 0.35)';
+    context.shadowBlur = tool === 'erase' ? 0 : 4;
     context.beginPath();
     context.moveTo(fromPoint.x, fromPoint.y);
     context.lineTo(toPoint.x, toPoint.y);
@@ -48,7 +51,7 @@ const drawStroke = (context, fromPoint, toPoint, brushSize, tool) => {
     context.restore();
 };
 
-const drawMaskImageToCanvas = (canvas, maskDataUrl) => {
+const drawMaskImageToCanvas = (canvas, maskDataUrl, onDraw) => {
     if (!canvas || !maskDataUrl) {
         return;
     }
@@ -63,6 +66,9 @@ const drawMaskImageToCanvas = (canvas, maskDataUrl) => {
 
         context.clearRect(0, 0, canvas.width, canvas.height);
         context.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
+        if (typeof onDraw === 'function') {
+            onDraw();
+        }
     };
     maskImage.src = maskDataUrl;
 };
@@ -73,8 +79,9 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
     const [tool, setTool] = useState('paint');
     const [brushSize, setBrushSize] = useState(24);
     const [zoom, setZoom] = useState(1);
-    const [isDrawModeEnabled, setIsDrawModeEnabled] = useState(false);
+    const [isDrawModeEnabled, setIsDrawModeEnabled] = useState(true);
     const [isPainting, setIsPainting] = useState(false);
+    const [hasMaskContent, setHasMaskContent] = useState(Boolean(initialMask && initialMask.imageBase64));
     const strokeStateRef = useRef(null);
 
     const getCanvasPoint = (event) => {
@@ -121,15 +128,21 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
         context.clearRect(0, 0, canvas.width, canvas.height);
 
         if (!nextMaskDataUrl) {
+            setHasMaskContent(false);
             return;
         }
 
-        drawMaskImageToCanvas(canvas, nextMaskDataUrl);
+        setHasMaskContent(true);
+        drawMaskImageToCanvas(canvas, nextMaskDataUrl, () => setHasMaskContent(true));
     };
 
     useEffect(() => {
         syncCanvasFromMask();
     }, [initialMask, previewUrl]);
+
+    useEffect(() => {
+        setHasMaskContent(Boolean(initialMask && initialMask.imageBase64));
+    }, [initialMask]);
 
     useEffect(() => {
         const image = imageRef.current;
@@ -153,11 +166,13 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
         const canvas = canvasRef.current;
 
         if (!canvas) {
+            setHasMaskContent(false);
             onChange(null);
             return;
         }
 
         if (!hasVisibleMask(canvas)) {
+            setHasMaskContent(false);
             onChange(null);
             return;
         }
@@ -190,6 +205,7 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
         const dataUrl = exportCanvas.toDataURL('image/png');
         const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
 
+        setHasMaskContent(Boolean(base64));
         onChange(base64 ? {
             imageBase64: base64,
             mimeType: 'image/png',
@@ -300,6 +316,9 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
             inputType: 'pointer'
         };
         drawStroke(context, point, point, brushSize, tool);
+        if (tool !== 'erase') {
+            setHasMaskContent(true);
+        }
         setIsPainting(true);
         if (typeof canvas.setPointerCapture === 'function') {
             canvas.setPointerCapture(event.pointerId);
@@ -326,6 +345,9 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
             inputType: 'mouse'
         };
         drawStroke(context, point, point, brushSize, tool);
+        if (tool !== 'erase') {
+            setHasMaskContent(true);
+        }
         setIsPainting(true);
         event.preventDefault();
     };
@@ -410,8 +432,34 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
 
         strokeStateRef.current = null;
         setIsPainting(false);
+        setHasMaskContent(false);
         onChange(null);
     };
+
+    const handleSelectTool = (nextTool) => {
+        if (disabled) {
+            return;
+        }
+
+        setTool(nextTool);
+        setIsDrawModeEnabled(true);
+    };
+
+    const drawModeTitle = disabled
+        ? 'Editor đang bị khóa'
+        : isDrawModeEnabled
+            ? tool === 'erase'
+                ? 'Cọ đang bật: chế độ xóa'
+                : 'Cọ đang bật: chế độ vẽ'
+            : 'Cọ đang tắt';
+    const drawModeDescription = disabled
+        ? 'Tạm thời chưa thể chỉnh mask khi hành động bị khóa.'
+        : isDrawModeEnabled
+            ? tool === 'erase'
+                ? 'Kéo chuột trên ảnh để xóa phần mask dư.'
+                : 'Kéo chuột trên ảnh để tô vùng cần phục chế mạnh hơn.'
+            : 'Bấm nút bật cọ để bắt đầu vẽ mask trên ảnh.';
+    const maskPresenceLabel = hasMaskContent ? 'Đã có mask' : 'Chưa có mask';
 
     return (
         <div className="mask-editor-shell">
@@ -420,7 +468,7 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
                     <button
                         className={`segment-btn ${tool === 'paint' ? 'active' : ''}`}
                         type="button"
-                        onClick={() => setTool('paint')}
+                        onClick={() => handleSelectTool('paint')}
                         disabled={disabled}
                     >
                         Vẽ mask
@@ -428,7 +476,7 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
                     <button
                         className={`segment-btn ${tool === 'erase' ? 'active' : ''}`}
                         type="button"
-                        onClick={() => setTool('erase')}
+                        onClick={() => handleSelectTool('erase')}
                         disabled={disabled}
                     >
                         Xóa mask
@@ -439,8 +487,15 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
                         onClick={() => setIsDrawModeEnabled((current) => !current)}
                         disabled={disabled}
                     >
-                        {isDrawModeEnabled ? 'Tắt vẽ' : 'Bật vẽ mask'}
+                        {isDrawModeEnabled ? 'Tắt cọ' : 'Bật cọ'}
                     </button>
+                </div>
+                <div className={`mask-editor-status-card ${isDrawModeEnabled ? 'is-armed' : 'is-idle'} ${hasMaskContent ? 'has-mask' : 'is-empty'}`}>
+                    <div className="mask-editor-status-head">
+                        <strong>{drawModeTitle}</strong>
+                        <span className={`mask-editor-status-pill ${hasMaskContent ? 'has-mask' : 'is-empty'}`}>{maskPresenceLabel}</span>
+                    </div>
+                    <span>{drawModeDescription}</span>
                 </div>
                 <div className="mask-editor-slider-group">
                     <label className="mask-editor-slider-label" htmlFor="repair-mask-brush">
@@ -479,6 +534,9 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
             <div className="mask-editor-scroll">
                 <div className="mask-editor-zoom-stage" style={{ width: `${zoom * 100}%` }}>
                     <div className="face-region-stage">
+                        <div className={`mask-editor-stage-badge ${isDrawModeEnabled ? 'is-armed' : 'is-idle'}`}>
+                            {isDrawModeEnabled ? (tool === 'erase' ? 'Đang xóa mask' : 'Đang vẽ mask') : 'Cọ đang tắt'}
+                        </div>
                         <img
                             ref={imageRef}
                             className="face-region-image"
@@ -500,6 +558,10 @@ export const RestorationMaskEditor = ({ previewUrl, initialMask, onChange, disab
                             onMouseUp={handleInteractionMouseUp}
                             onMouseLeave={handleInteractionMouseLeave}
                         />
+                        <div className={`mask-editor-stage-hint ${isDrawModeEnabled ? 'is-active' : 'is-idle'}`}>
+                            <strong>{maskPresenceLabel}</strong>
+                            <span>{drawModeDescription}</span>
+                        </div>
                     </div>
                 </div>
             </div>

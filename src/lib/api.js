@@ -1,5 +1,5 @@
-const DEFAULT_API_BASE_URL = "https://banana-ai-tool-be.khanhdg3007-896.workers.dev/v1";
-
+const DEFAULT_API_BASE_URL = "http://localhost:8787/v1";
+// const DEFAULT_API_BASE_URL = "https://banana-ai-tool-be.khanhdg3007-896.workers.dev/v1";
 export const API_BASE_URL =
     (typeof window !== "undefined" && window.__BANANA_TOOL_API_BASE_URL__) || DEFAULT_API_BASE_URL;
 
