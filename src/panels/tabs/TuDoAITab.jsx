@@ -37,7 +37,7 @@ export const TuDoAITab = ({
     const [errorMessage, setErrorMessage] = useState('');
     const [historyNotice, setHistoryNotice] = useState('');
     const [aspectRatio, setAspectRatio] = useState('2:3');
-    const [size, setSize] = useState('4K');
+    const [size, setSize] = useState('1K');
     const [prompt, setPrompt] = useState('');
     const [memoName, setMemoName] = useState('');
     const [savedPrompts, setSavedPrompts] = useState(() => {
@@ -130,7 +130,7 @@ export const TuDoAITab = ({
             setResult(null);
             setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
             setAspectRatio(payload.aspectRatio || '2:3');
-            setSize(payload.size || '4K');
+            setSize(payload.size || '1K');
             setPrompt(payload.prompt || '');
             setAutoZoom(typeof payload.autoZoom === 'boolean' ? payload.autoZoom : true);
             setCreativity(payload.creativity || 'balanced');

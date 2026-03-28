@@ -502,7 +502,7 @@ export const PhucCheTab = ({
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [historyNotice, setHistoryNotice] = useState('');
-    const [size, setSize] = useState('4K');
+    const [size, setSize] = useState('original');
     const [preset, setPreset] = useState('comprehensive_restore');
     const [mode, setMode] = useState(defaultPresetProfile.mode);
     const [enhanceFace, setEnhanceFace] = useState(defaultPresetProfile.enhanceFace);
@@ -622,7 +622,7 @@ export const PhucCheTab = ({
             setResult(null);
             setCompareView('after');
             setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
-            setSize(payload.size || '4K');
+            setSize(payload.size || 'original');
             setPreset(payload.preset || 'comprehensive_restore');
             setMode(payload.mode || defaultPresetProfile.mode);
             setEnhanceFace(typeof payload.enhanceFace === 'boolean' ? payload.enhanceFace : defaultPresetProfile.enhanceFace);

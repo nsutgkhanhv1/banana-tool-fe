@@ -95,7 +95,7 @@ export const ThayNenTab = ({
     const [errorMessage, setErrorMessage] = useState('');
     const [historyNotice, setHistoryNotice] = useState('');
     const [aspectRatio, setAspectRatio] = useState('3:4');
-    const [size, setSize] = useState('4K');
+    const [size, setSize] = useState('1K');
     const [backgroundPreset, setBackgroundPreset] = useState('studio');
     const [prompt, setPrompt] = useState('');
     const [keepSubject, setKeepSubject] = useState(true);
@@ -210,7 +210,7 @@ export const ThayNenTab = ({
             setResult(null);
             setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
             setAspectRatio(payload.aspectRatio || '3:4');
-            setSize(payload.size || '4K');
+            setSize(payload.size || '1K');
             setBackgroundPreset(payload.backgroundPreset || 'studio');
             setPrompt(payload.prompt || '');
             setKeepSubject(typeof payload.keepSubject === 'boolean' ? payload.keepSubject : true);
