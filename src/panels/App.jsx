@@ -992,6 +992,43 @@ export const App = () => {
         })
     ), [submitGenerateRequest]);
 
+    const submitPromptOptimize = useCallback(async (payload) => {
+        if (!session) {
+            openAuthModal("login");
+            return { ok: false };
+        }
+
+        try {
+            const data = await requestJson("/images/prompt/optimize", {
+                method: "POST",
+                body: JSON.stringify(payload)
+            }, session, handleSessionChange);
+
+            return {
+                ok: true,
+                data
+            };
+        } catch (error) {
+            if (error && error.status === 401) {
+                applyUnauthenticatedShell();
+                openAuthModal("login", {
+                    notice: "PhiÃªn Ä‘Äƒng nháº­p Ä‘Ã£ háº¿t háº¡n. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i."
+                });
+                showToast("PhiÃªn Ä‘Äƒng nháº­p Ä‘Ã£ háº¿t háº¡n.", "error");
+                return { ok: false };
+            }
+
+            showToast(error && error.message ? error.message : "KhÃ´ng thá»ƒ tá»‘i Æ°u prompt AI.", "error");
+            return { ok: false, error };
+        }
+    }, [
+        applyUnauthenticatedShell,
+        handleSessionChange,
+        openAuthModal,
+        session,
+        showToast
+    ]);
+
     const pluginVersion = getPluginVersion();
     const environmentSummary = getPluginEnvironmentSummary();
     const shellLocked = authStatus !== "authenticated";
@@ -1141,6 +1178,7 @@ export const App = () => {
                         onRequireAuth={tabProps.onRequireAuth}
                         onRecordHistory={tabProps.onRecordHistory}
                         historyRestoreRequest={tabProps.historyRestoreRequest}
+                        onOptimizePrompt={submitPromptOptimize}
                         onGenerate={
                             tab.id === "tudoai"
                                 ? submitTuDoAIGenerate
@@ -1156,12 +1194,15 @@ export const App = () => {
         })
     ), [
         activeTab,
+        submitPromptOptimize,
         submitPhucCheAnhGenerate,
         submitThayNenGenerate,
         submitTuDoAIGenerate,
         tabProps.actionsDisabled,
         tabProps.onGenerate,
+        tabProps.onRecordHistory,
         tabProps.onRequireAuth,
+        tabProps.historyRestoreRequest,
         tabRefreshVersion
     ]);
 

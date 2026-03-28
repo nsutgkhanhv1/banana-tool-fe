@@ -81,7 +81,14 @@ const validateRepairMask = (mask) => {
     return '';
 };
 
-export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecordHistory, historyRestoreRequest }) => {
+export const ThayNenTab = ({
+    actionsDisabled,
+    onRequireAuth,
+    onGenerate,
+    onOptimizePrompt,
+    onRecordHistory,
+    historyRestoreRequest
+}) => {
     const rootRef = useRef(null);
     const handledRestoreIdRef = useRef(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -96,6 +103,7 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     const [replacementStrength, setReplacementStrength] = useState('medium');
     const [result, setResult] = useState(null);
     const [isManualInsertLoading, setIsManualInsertLoading] = useState(false);
+    const [isOptimizingPrompt, setIsOptimizingPrompt] = useState(false);
     const [showQuickLayerOptions, setShowQuickLayerOptions] = useState(false);
     const [isQuickLayerImporting, setIsQuickLayerImporting] = useState(false);
     const [showMaskEditor, setShowMaskEditor] = useState(false);
@@ -518,6 +526,56 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         }
     };
 
+    const handleOptimizePrompt = async () => {
+        if (actionsDisabled) {
+            onRequireAuth();
+            return;
+        }
+
+        const trimmedPrompt = prompt.trim();
+        if (!trimmedPrompt) {
+            setErrorMessage('Vui lòng nhập prompt trước khi tối ưu.');
+            return;
+        }
+
+        if (typeof onOptimizePrompt !== 'function') {
+            setErrorMessage('Tính năng tối ưu prompt AI chưa sẵn sàng.');
+            return;
+        }
+
+        setErrorMessage('');
+        setHistoryNotice('');
+        setIsOptimizingPrompt(true);
+
+        try {
+            const response = await onOptimizePrompt({
+                feature: 'thay-nen',
+                prompt: trimmedPrompt,
+                context: {
+                    preset: backgroundPreset,
+                    ratio: aspectRatio,
+                    size,
+                    keepSubject,
+                    matchLighting,
+                    replacementStrength,
+                    hasRepairMask: Boolean(repairMask)
+                },
+                clientRequestId: `thay-nen-optimize-${Date.now()}`,
+                appVersion: 'uxp-dev'
+            });
+
+            if (!response || !response.ok || !response.data || !response.data.optimizedPrompt) {
+                setErrorMessage('Không thể tối ưu prompt AI.');
+                return;
+            }
+
+            setPrompt(response.data.optimizedPrompt);
+            setHistoryNotice('Đã tối ưu prompt AI và giữ nguyên ý đồ của bạn. Bạn có thể chỉnh lại trước khi generate.');
+        } finally {
+            setIsOptimizingPrompt(false);
+        }
+    };
+
     const handleRemoveImage = (imageId, event) => {
         if (actionsDisabled) {
             onRequireAuth();
@@ -667,11 +725,16 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                         </div>
                     </div>
                     <div className="prompt-toolbar-actions">
-                        <button className="btn-action primary-action" onClick={() => {}} title="Tối ưu prompt AI">
+                        <button
+                            className="btn-action primary-action"
+                            onClick={handleOptimizePrompt}
+                            disabled={actionsDisabled || isLoading || isOptimizingPrompt || !prompt.trim()}
+                            title="Tối ưu prompt AI"
+                        >
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                             </svg>
-                            <span>Tối ưu prompt AI</span>
+                            <span>{isOptimizingPrompt ? 'Đang tối ưu...' : 'Tối ưu prompt AI'}</span>
                         </button>
                     </div>
                 </div>
@@ -700,6 +763,7 @@ export const ThayNenTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                             placeholder="Mô tả nền mới, ánh sáng, mood hoặc tone màu mong muốn..."
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
+                            maxLength={500}
                         ></textarea>
                         <div className="prompt-char-count">{prompt.length}/500</div>
                     </div>

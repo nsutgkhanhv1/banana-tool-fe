@@ -488,7 +488,14 @@ const FaceRegionEditor = ({
     );
 };
 
-export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecordHistory, historyRestoreRequest }) => {
+export const PhucCheTab = ({
+    actionsDisabled,
+    onRequireAuth,
+    onGenerate,
+    onOptimizePrompt,
+    onRecordHistory,
+    historyRestoreRequest
+}) => {
     const defaultPresetProfile = PRESET_PROFILES.comprehensive_restore;
     const rootRef = useRef(null);
     const handledRestoreIdRef = useRef(null);
@@ -516,6 +523,7 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
     });
     const [result, setResult] = useState(null);
     const [isManualInsertLoading, setIsManualInsertLoading] = useState(false);
+    const [isOptimizingPrompt, setIsOptimizingPrompt] = useState(false);
     const [showQuickLayerOptions, setShowQuickLayerOptions] = useState(false);
     const [showAdvancedPrompt, setShowAdvancedPrompt] = useState(false);
     const [showFaceRegionEditor, setShowFaceRegionEditor] = useState(false);
@@ -710,6 +718,61 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
         if (selected) {
             setPrompt(selected.prompt);
             setMemoName(selected.name);
+        }
+    };
+
+    const handleOptimizePrompt = async () => {
+        if (actionsDisabled) {
+            onRequireAuth();
+            return;
+        }
+
+        const trimmedPrompt = prompt.trim();
+        if (!trimmedPrompt) {
+            setErrorMessage('Vui lòng nhập prompt trước khi tối ưu.');
+            return;
+        }
+
+        if (typeof onOptimizePrompt !== 'function') {
+            setErrorMessage('Tính năng tối ưu prompt AI chưa sẵn sàng.');
+            return;
+        }
+
+        setErrorMessage('');
+        setHistoryNotice('');
+        setIsOptimizingPrompt(true);
+
+        try {
+            const response = await onOptimizePrompt({
+                feature: 'phuc-che-anh',
+                prompt: trimmedPrompt,
+                context: {
+                    preset,
+                    mode,
+                    size,
+                    enhanceFace,
+                    denoise,
+                    colorize,
+                    fidelityMode,
+                    restorationIntensity,
+                    colorTone: colorize ? colorTone : '',
+                    facePriorityRegionCount: facePriorityRegions.length,
+                    hasRepairMask: Boolean(repairMask)
+                },
+                clientRequestId: `phuc-che-anh-optimize-${Date.now()}`,
+                appVersion: 'uxp-dev'
+            });
+
+            if (!response || !response.ok || !response.data || !response.data.optimizedPrompt) {
+                setErrorMessage('Không thể tối ưu prompt AI.');
+                return;
+            }
+
+            setPrompt(response.data.optimizedPrompt);
+            setShowAdvancedPrompt(true);
+            setHistoryNotice('Đã tối ưu prompt AI và giữ nguyên ý đồ phục chế của bạn. Bạn có thể chỉnh lại trước khi generate.');
+        } finally {
+            setIsOptimizingPrompt(false);
         }
     };
 
@@ -1185,11 +1248,16 @@ export const PhucCheTab = ({ actionsDisabled, onRequireAuth, onGenerate, onRecor
                             </div>
                         </div>
                         <div className="prompt-toolbar-actions">
-                            <button className="btn-action primary-action" onClick={() => {}} title="Tối ưu prompt AI">
+                            <button
+                                className="btn-action primary-action"
+                                onClick={handleOptimizePrompt}
+                                disabled={actionsDisabled || isLoading || isOptimizingPrompt || !prompt.trim()}
+                                title="Tối ưu prompt AI"
+                            >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                                 </svg>
-                                <span>Tối ưu prompt AI</span>
+                                <span>{isOptimizingPrompt ? 'Đang tối ưu...' : 'Tối ưu prompt AI'}</span>
                             </button>
                         </div>
                     </div>
