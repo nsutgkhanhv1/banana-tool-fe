@@ -1035,6 +1035,41 @@ export const ThayNenTab = ({
                         <div className="prompt-char-count">{prompt.length}/500</div>
                     </div>
 
+                                        
+                    <div className="prompt-footer-row">
+                        <div className="prompt-field-group" style={{flex: 1}}>
+                            <input
+                                type="text"
+                                className="prompt-memo-input"
+                                placeholder="Đặt tên gợi nhớ (tùy chọn)..."
+                                value={memoName}
+                                onChange={(e) => setMemoName(e.target.value)}
+                            />
+                        </div>
+                        <div className="prompt-footer-actions">
+                            <button className="btn-footer-action primary" onClick={handleSavePrompt} title="Lưu">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                <span>Lưu</span>
+                            </button>
+                            <button 
+                                className="btn-footer-action" 
+                                onClick={() => handleDeletePrompt(memoName)} 
+                                disabled={!memoName || !savedPrompts.some(p => p.name === memoName)} 
+                                title="Xóa"
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                                <span>Xóa</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="prompt-enhancer-stack">
                         <div className="switch-row prompt-enhancer-zoom-row">
                             <div>
@@ -1145,40 +1180,7 @@ export const ThayNenTab = ({
                             </div>
                         ) : null}
                     </div>
-                    
-                    <div className="prompt-footer-row">
-                        <div className="prompt-field-group" style={{flex: 1}}>
-                            <input
-                                type="text"
-                                className="prompt-memo-input"
-                                placeholder="Đặt tên gợi nhớ (tùy chọn)..."
-                                value={memoName}
-                                onChange={(e) => setMemoName(e.target.value)}
-                            />
-                        </div>
-                        <div className="prompt-footer-actions">
-                            <button className="btn-footer-action primary" onClick={handleSavePrompt} title="Lưu">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                                    <polyline points="7 3 7 8 15 8"></polyline>
-                                </svg>
-                                <span>Lưu</span>
-                            </button>
-                            <button 
-                                className="btn-footer-action" 
-                                onClick={() => handleDeletePrompt(memoName)} 
-                                disabled={!memoName || !savedPrompts.some(p => p.name === memoName)} 
-                                title="Xóa"
-                            >
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                                </svg>
-                                <span>Xóa</span>
-                            </button>
-                        </div>
-                    </div>
+
                 </div>
             </div>
 

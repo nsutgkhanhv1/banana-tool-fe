@@ -10,6 +10,194 @@ import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-image
 
 const TOOL_KEY = 'tudoai';
 const MAX_REFERENCE_IMAGES = 3;
+const FUNCTION_CATEGORIES = [
+    {
+        id: 'portrait-edit',
+        label: 'Chỉnh sửa ảnh - chân dung',
+        options: [
+            {
+                id: 'remove-fence',
+                label: 'Xóa hàng rào',
+                promptText: 'Loại bỏ hàng rào hoặc vật cản phía trước, làm sạch khung hình và giữ lại bối cảnh tự nhiên.'
+            },
+            {
+                id: 'change-head-direction',
+                label: 'Đổi hướng đầu',
+                promptText: 'Điều chỉnh hướng đầu và ánh nhìn của nhân vật tự nhiên hơn, giữ nguyên gương mặt và thần thái.'
+            },
+            {
+                id: 'change-body-pose',
+                label: 'Đổi tư thế cơ thể',
+                promptText: 'Thay đổi tư thế cơ thể cho cân đối, tự nhiên và phù hợp bố cục tổng thể.'
+            },
+            {
+                id: 'enhance-details',
+                label: 'Thêm chi tiết (nâng cao)',
+                promptText: 'Bổ sung thêm chi tiết nâng cao cho ảnh, tăng độ sắc nét, chiều sâu và độ hoàn thiện tổng thể.'
+            },
+            {
+                id: 'colorful-fireworks',
+                label: 'Pháo hoa đủ màu',
+                promptText: 'Thêm pháo hoa rực rỡ nhiều màu sắc ở hậu cảnh, nổi bật nhưng vẫn hài hòa với chủ thể.'
+            },
+            {
+                id: 'sparkle-fireworks',
+                label: 'Pháo Kim Tuyến',
+                promptText: 'Thêm hiệu ứng pháo kim tuyến lấp lánh, sang trọng và bắt mắt quanh khung hình.'
+            },
+            {
+                id: 'red-carpet',
+                label: 'Thảm đỏ',
+                promptText: 'Bổ sung thảm đỏ hoặc không khí sự kiện sang trọng, tạo cảm giác nổi bật như tại lễ trao giải.',
+                fullWidth: true
+            }
+        ]
+    },
+    {
+        id: 'beauty-fashion',
+        label: 'Làm đẹp - thời trang',
+        options: [
+            {
+                id: 'luxury-makeup',
+                label: 'Makeup cao cấp',
+                promptText: 'Tăng cảm giác makeup cao cấp, lớp nền sạch, ánh sáng đẹp trên da và tổng thể chỉn chu như ảnh beauty campaign.'
+            },
+            {
+                id: 'hair-volume',
+                label: 'Tăng độ bồng tóc',
+                promptText: 'Làm tóc bồng, gọn, có độ bay tự nhiên và giữ chi tiết sợi tóc chân thực.'
+            },
+            {
+                id: 'dress-enhance',
+                label: 'Nâng chất outfit',
+                promptText: 'Tinh chỉnh trang phục sang hơn, form gọn hơn và chất liệu hiển thị rõ, cao cấp hơn.'
+            },
+            {
+                id: 'skin-premium',
+                label: 'Da mịn cao cấp',
+                promptText: 'Tối ưu bề mặt da mịn, sạch, sáng khỏe nhưng vẫn giữ texture tự nhiên và không bị nhựa.'
+            },
+            {
+                id: 'jewelry-shine',
+                label: 'Tăng sáng trang sức',
+                promptText: 'Làm trang sức bắt sáng hơn, tinh tế hơn và có điểm nhấn sang trọng.'
+            },
+            {
+                id: 'fashion-editorial',
+                label: 'Editorial fashion',
+                promptText: 'Đẩy tổng thể theo hướng editorial fashion, thần thái thời trang hơn, bố cục gọn và hiện đại hơn.'
+            }
+        ]
+    },
+    {
+        id: 'background-effects',
+        label: 'Hiệu ứng nền - không khí',
+        options: [
+            {
+                id: 'sunset-glow',
+                label: 'Hoàng hôn phát sáng',
+                promptText: 'Thêm không khí hoàng hôn ấm, ánh sáng viền đẹp và cảm giác cinematic nhẹ.'
+            },
+            {
+                id: 'city-bokeh',
+                label: 'Bokeh phố đêm',
+                promptText: 'Tạo bokeh đèn phố đêm mềm ở hậu cảnh, hiện đại và sang hơn.'
+            },
+            {
+                id: 'soft-fog',
+                label: 'Sương mỏng',
+                promptText: 'Bổ sung lớp sương mỏng nhẹ để tăng chiều sâu không gian và cảm giác điện ảnh.'
+            },
+            {
+                id: 'light-streaks',
+                label: 'Vệt sáng nghệ thuật',
+                promptText: 'Thêm các vệt sáng nghệ thuật tinh tế để ảnh sống động và có năng lượng hơn.'
+            },
+            {
+                id: 'premium-stage',
+                label: 'Sân khấu premium',
+                promptText: 'Tạo cảm giác như chụp tại sân khấu hoặc event premium, ánh sáng nổi bật và có chiều sâu.'
+            },
+            {
+                id: 'confetti-luxe',
+                label: 'Confetti sang trọng',
+                promptText: 'Thêm confetti hoặc hạt lấp lánh nhẹ, cao cấp và hài hòa với nhân vật chính.'
+            }
+        ]
+    },
+    {
+        id: 'commercial-photo',
+        label: 'Ảnh quảng cáo - sản phẩm',
+        options: [
+            {
+                id: 'clean-ad-light',
+                label: 'Ánh sáng quảng cáo',
+                promptText: 'Tối ưu ánh sáng theo phong cách ảnh quảng cáo sạch, rõ chủ thể, sắc nét và chuyên nghiệp.'
+            },
+            {
+                id: 'brand-color-tone',
+                label: 'Tone màu thương hiệu',
+                promptText: 'Đồng bộ màu sắc theo hướng thương hiệu hiện đại, nhất quán và dễ dùng cho quảng cáo.'
+            },
+            {
+                id: 'premium-detail',
+                label: 'Chi tiết premium',
+                promptText: 'Nâng độ hoàn thiện chi tiết để ảnh có cảm giác premium, rõ chất liệu và sắc sảo hơn.'
+            },
+            {
+                id: 'hero-shot',
+                label: 'Hero shot',
+                promptText: 'Đẩy bố cục và điểm nhìn theo kiểu hero shot, nhân vật/chủ thể nổi bật rõ ràng và có sức hút thương mại.'
+            }
+        ]
+    }
+];
+
+const FUNCTION_CATEGORY_MAP = FUNCTION_CATEGORIES.reduce((map, category) => {
+    map[category.id] = category;
+    return map;
+}, {});
+
+const getFunctionOption = (categoryId, optionId) => {
+    if (!categoryId || !optionId) {
+        return null;
+    }
+
+    return FUNCTION_CATEGORY_MAP[categoryId]?.options.find((option) => option.id === optionId) || null;
+};
+
+const normalizeSavedPrompt = (entry) => {
+    const categoryId = FUNCTION_CATEGORY_MAP[entry?.functionCategoryId] ? entry.functionCategoryId : FUNCTION_CATEGORIES[0].id;
+    const selectedOption = getFunctionOption(categoryId, entry?.selectedFunctionId);
+
+    return {
+        name: entry?.name || '',
+        prompt: entry?.prompt || '',
+        functionCategoryId: categoryId,
+        selectedFunctionId: selectedOption?.id || '',
+        preserveSubject: typeof entry?.preserveSubject === 'boolean' ? entry.preserveSubject : true,
+        fixImage: Boolean(entry?.fixImage)
+    };
+};
+
+const buildPromptFragments = ({ selectedFunctionId, functionCategoryId, preserveSubject, fixImage }) => {
+    const fragments = [];
+    const selectedFunction = getFunctionOption(functionCategoryId, selectedFunctionId);
+
+    if (selectedFunction?.promptText) {
+        fragments.push(selectedFunction.promptText);
+    }
+
+    if (preserveSubject) {
+        fragments.push('Giữ nguyên nhân vật chính, gương mặt, nhận diện, trang phục và thần thái tổng thể.');
+    }
+
+    if (fixImage) {
+        fragments.push('Tự động sửa lỗi ảnh, làm sạch chi tiết thừa, cải thiện ánh sáng và tối ưu chất lượng tổng thể.');
+    }
+
+    return fragments;
+};
 
 const mapSourceTypeToApiSource = (sourceType) => {
     if (sourceType === 'quick_layer_canvas') {
@@ -43,11 +231,16 @@ export const TuDoAITab = ({
     const [savedPrompts, setSavedPrompts] = useState(() => {
         try {
             const saved = localStorage.getItem('banana_saved_prompts_tudoai');
-            return saved ? JSON.parse(saved) : [];
+            return saved ? JSON.parse(saved).map(normalizeSavedPrompt).filter((item) => item.name) : [];
         } catch (e) {
             return [];
         }
     });
+    const [functionCategoryId, setFunctionCategoryId] = useState(FUNCTION_CATEGORIES[0].id);
+    const [selectedFunctionId, setSelectedFunctionId] = useState('');
+    const [preserveSubject, setPreserveSubject] = useState(true);
+    const [fixImage, setFixImage] = useState(false);
+    const [isFunctionAccordionOpen, setIsFunctionAccordionOpen] = useState(false);
     const [autoZoom, setAutoZoom] = useState(true);
     const [creativity, setCreativity] = useState('balanced');
     const [result, setResult] = useState(null);
@@ -73,7 +266,19 @@ export const TuDoAITab = ({
         maxItems: MAX_REFERENCE_IMAGES
     });
 
-    const canSubmit = useMemo(() => Boolean(prompt.trim()) || items.length > 0, [items.length, prompt]);
+    const promptFragments = useMemo(
+        () => buildPromptFragments({ selectedFunctionId, functionCategoryId, preserveSubject, fixImage }),
+        [selectedFunctionId, functionCategoryId, preserveSubject, fixImage]
+    );
+    const finalPrompt = useMemo(
+        () => [prompt.trim(), ...promptFragments].filter(Boolean).join('\n'),
+        [prompt, promptFragments]
+    );
+    const canSubmit = useMemo(() => Boolean(finalPrompt.trim()) || items.length > 0, [finalPrompt, items.length]);
+    const selectedFunction = useMemo(
+        () => getFunctionOption(functionCategoryId, selectedFunctionId),
+        [functionCategoryId, selectedFunctionId]
+    );
 
     useEffect(() => {
         const handlePaste = async (event) => {
@@ -132,6 +337,11 @@ export const TuDoAITab = ({
             setAspectRatio(payload.aspectRatio || '2:3');
             setSize(payload.size || '1K');
             setPrompt(payload.prompt || '');
+            setFunctionCategoryId(FUNCTION_CATEGORY_MAP[payload.functionCategoryId] ? payload.functionCategoryId : FUNCTION_CATEGORIES[0].id);
+            setSelectedFunctionId(getFunctionOption(payload.functionCategoryId, payload.selectedFunctionId)?.id || '');
+            setPreserveSubject(typeof payload.preserveSubject === 'boolean' ? payload.preserveSubject : true);
+            setFixImage(Boolean(payload.fixImage));
+            setIsFunctionAccordionOpen(false);
             setAutoZoom(typeof payload.autoZoom === 'boolean' ? payload.autoZoom : true);
             setCreativity(payload.creativity || 'balanced');
             setShowQuickLayerOptions(false);
@@ -154,7 +364,7 @@ export const TuDoAITab = ({
     }, [historyRestoreRequest, restoreFromSnapshots]);
 
     const createGeneratePayload = () => {
-        const trimmedPrompt = prompt.trim();
+        const trimmedPrompt = finalPrompt.trim();
 
         if (!trimmedPrompt && items.length === 0) {
             throw new Error('Nhập prompt hoặc thêm ít nhất 1 ảnh tham chiếu trước khi generate.');
@@ -185,9 +395,19 @@ export const TuDoAITab = ({
     };
 
     const handleSavePrompt = () => {
-        if (!prompt.trim()) return;
+        if (!prompt.trim() && !selectedFunctionId && !fixImage && preserveSubject) return;
         const name = memoName.trim() || `Prompt ${new Date().toLocaleString()}`;
-        const newSaved = [...savedPrompts.filter(p => p.name !== name), { name, prompt: prompt.trim() }];
+        const newSaved = [
+            ...savedPrompts.filter((p) => p.name !== name),
+            {
+                name,
+                prompt: prompt.trim(),
+                functionCategoryId,
+                selectedFunctionId,
+                preserveSubject,
+                fixImage
+            }
+        ];
         setSavedPrompts(newSaved);
         localStorage.setItem('banana_saved_prompts_tudoai', JSON.stringify(newSaved));
         setMemoName(name);
@@ -205,6 +425,10 @@ export const TuDoAITab = ({
         if (selected) {
             setPrompt(selected.prompt);
             setMemoName(selected.name);
+            setFunctionCategoryId(selected.functionCategoryId || FUNCTION_CATEGORIES[0].id);
+            setSelectedFunctionId(selected.selectedFunctionId || '');
+            setPreserveSubject(typeof selected.preserveSubject === 'boolean' ? selected.preserveSubject : true);
+            setFixImage(Boolean(selected.fixImage));
         }
     };
 
@@ -232,13 +456,19 @@ export const TuDoAITab = ({
         try {
             const response = await onOptimizePrompt({
                 feature: 'tu-do-ai',
-                prompt: trimmedPrompt,
+                prompt: prompt.trim(),
                 context: {
                     ratio: aspectRatio,
                     size,
                     referenceImageCount: items.length,
                     autoZoom,
-                    creativity
+                    creativity,
+                    functionCategoryId,
+                    selectedFunctionId,
+                    selectedFunctionLabel: selectedFunction?.label || '',
+                    preserveSubject,
+                    fixImage,
+                    finalPrompt
                 },
                 clientRequestId: `tu-do-ai-optimize-${Date.now()}`,
                 appVersion: 'uxp-dev'
@@ -321,6 +551,10 @@ export const TuDoAITab = ({
                     settingsSnapshot: {
                         aspectRatio: payload.ratio,
                         size: payload.size,
+                        functionCategoryId,
+                        selectedFunctionId,
+                        preserveSubject,
+                        fixImage,
                         autoZoom: payload.autoZoom,
                         creativity: payload.creativity,
                         referenceImageCount: items.length,
@@ -331,6 +565,9 @@ export const TuDoAITab = ({
                         `Ảnh tham chiếu: ${items.length}`,
                         `Tỉ lệ: ${payload.ratio}`,
                         `Kích thước: ${payload.size}`,
+                        `Chức năng: ${selectedFunction?.label || 'Không chọn'}`,
+                        `Giữ nhân vật: ${preserveSubject ? 'Bật' : 'Tắt'}`,
+                        `Fix ảnh: ${fixImage ? 'Bật' : 'Tắt'}`,
                         `Mức bám input: ${payload.creativity === 'creative' ? 'Sáng tạo' : payload.creativity === 'faithful' ? 'Bám sát' : 'Cân bằng'}`,
                         `Tự động thu phóng: ${payload.autoZoom ? 'Bật' : 'Tắt'}`
                     ],
@@ -346,9 +583,13 @@ export const TuDoAITab = ({
                     },
                     rehydrationPayload: {
                         tabId: TOOL_KEY,
-                        prompt: payload.prompt,
+                        prompt: prompt.trim(),
                         aspectRatio: payload.ratio,
                         size: payload.size,
+                        functionCategoryId,
+                        selectedFunctionId,
+                        preserveSubject,
+                        fixImage,
                         autoZoom: payload.autoZoom,
                         creativity: payload.creativity,
                         activeImageId,
@@ -472,6 +713,14 @@ export const TuDoAITab = ({
         e.stopPropagation();
         setErrorMessage('');
         removeImage(imageId);
+    };
+
+    const handleSelectFunction = (optionId) => {
+        setSelectedFunctionId((current) => (current === optionId ? '' : optionId));
+    };
+
+    const handleToggleFunctionAccordion = () => {
+        setIsFunctionAccordionOpen((current) => !current);
     };
 
     return (
@@ -621,7 +870,7 @@ export const TuDoAITab = ({
                         ></textarea>
                         <div className="prompt-char-count">{prompt.length}/500</div>
                     </div>
-                    
+
                     <div className="prompt-footer-row">
                         <div className="prompt-field-group" style={{flex: 1}}>
                             <input
@@ -688,6 +937,79 @@ export const TuDoAITab = ({
                 </select>
             </div>
 
+                                <div className="prompt-function-box">
+                        <div className="prompt-function-accordion-list">
+                            <div className={`function-accordion-item ${isFunctionAccordionOpen ? 'open' : ''}`}>
+                                <button
+                                    type="button"
+                                    className="function-accordion-header"
+                                    onClick={handleToggleFunctionAccordion}
+                                >
+                                    <span className="function-accordion-title">Chức năng sẵn có</span>
+                                    <span className={`function-accordion-chevron ${isFunctionAccordionOpen ? 'open' : ''}`}></span>
+                                </button>
+
+                                <div
+                                    className="function-accordion-body"
+                                    style={{ display: isFunctionAccordionOpen ? 'block' : 'none' }}
+                                >
+                                    <div className="prompt-function-body-stack">
+                                        <select
+                                            className="dropdown prompt-function-select"
+                                            value={functionCategoryId}
+                                            onChange={(event) => {
+                                                setFunctionCategoryId(event.target.value);
+                                                setSelectedFunctionId('');
+                                            }}
+                                        >
+                                            {FUNCTION_CATEGORIES.map((category) => (
+                                                <option key={category.id} value={category.id}>{category.label}</option>
+                                            ))}
+                                        </select>
+
+                                        <div className="prompt-function-button-list">
+                                            {(FUNCTION_CATEGORY_MAP[functionCategoryId]?.options || []).map((option) => (
+                                                <div
+                                                    key={option.id}
+                                                    className={`prompt-function-cell ${option.fullWidth ? 'full-span' : ''}`}
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        className={`prompt-function-button ${selectedFunctionId === option.id ? 'active' : ''}`}
+                                                        onClick={() => {
+                                                            setFunctionCategoryId(functionCategoryId);
+                                                            handleSelectFunction(option.id);
+                                                        }}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="prompt-function-toggle-row">
+                            <div className="switch-row prompt-function-switch">
+                                <div className="switch-label">Giữ nhân vật</div>
+                                <label className="switch">
+                                    <input type="checkbox" checked={preserveSubject} onChange={(event) => setPreserveSubject(event.target.checked)} />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+
+                            <div className="switch-row prompt-function-switch">
+                                <div className="switch-label">Fix ảnh</div>
+                                <label className="switch">
+                                    <input type="checkbox" checked={fixImage} onChange={(event) => setFixImage(event.target.checked)} />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
             {errorMessage ? (
                 <div className="section">
                     <div className="status-banner status-banner-error">{errorMessage}</div>
