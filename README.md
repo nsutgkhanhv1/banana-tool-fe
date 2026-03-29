@@ -23,7 +23,9 @@ yarn import
 There are two ways to build the plugin for use in Photoshop:
 
 * `yarn watch` (or `npm run watch`) will build a development version of the plugin, and recompile every time you make a change to the source files. The result is placed in `dist` folder. Make sure your plugin is in watch mode in UDT app.
-* `yarn build` (or `npm run build`) will build a production version of the plugin and place it in `dist` folder. It will not update every time you make a change to the source files.
+* `yarn build` (or `npm run build`) will build a development bundle and place it in `dist` folder.
+* `npm run build:prod` will build an optimized production bundle intended for packaging.
+* `npm run ccx:prep` will build the production bundle, verify `dist`, and print the packaging steps for Adobe UXP Developer Tool.
 
 > You **must** run either `watch` or `build` prior to trying to use within Photoshop!
 
@@ -37,6 +39,18 @@ If the plugin hasn't already been added to your workspace in the UXP Developer T
 
 Once added, you can load it into Photoshop by clicking the ••• button on the corresponding row, and clicking "Load". Switch to Photoshop and you should see the starter panels.
 
+## Packaging as `.ccx`
+
+This repo is prepared for `.ccx` packaging, but the actual `.ccx` file should be created by Adobe UXP Developer Tool.
+
+1. Run `npm run ccx:prep`
+2. Open Adobe UXP Developer Tool
+3. Add or select the plugin using `dist/manifest.json`
+4. Open the plugin Actions menu and choose `Package`
+5. Pick an output folder and let UDT generate the `.ccx`
+
+Before distributing the plugin outside your own machine, replace the test plugin `id` in `plugin/manifest.json` with a valid Adobe Developer Distribution ID.
+
 ## What this plugin does
 
 This plugin doesn't do much, but does illustrate how to create two panels in Photoshop with `entrypoints.setup`, and how to create flyout menus. It also demonstrates the use of several Spectrum UXP widgets to create a simple color picker in the primary panel.
@@ -46,5 +60,5 @@ This plugin doesn't do much, but does illustrate how to create two panels in Pho
 * If you're getting errors with `npm install`, we can reinstall the project dependencies. Let's first make sure to delete `node_modules/*` from the `template` folder as well as the `package-lock.json` and `yarn.lock` file. Staying in the `template` directory, run `npm install` again and this will regenerate your `package-lock.json` file.
 * After running `yarn import` if you end up with the error `Lockfile already exists, not importing.`, then it is likely due to an already existing `yarn.lock` in your project. In such a case, you can either delete the lock file to generate a new `yarn.lock` or continue with the [Build Process](#build-process) steps.
 
-PS Version : 23.2.0 or higher
+PS Version : 23.3.0 or higher
 UXP Version : 5.6 or higher

@@ -1,9 +1,12 @@
 {
-  "name": "com.adobe.uxp.starter.react",
+  "name": "banana-tool-fe",
   "version": "1.0.0",
   "scripts": {
     "watch": "nodemon -w src -e js,jsx,json,css,html -w webpack.config.js -x npm run build",
     "build": "webpack --mode development",
+    "build:prod": "webpack --mode production",
+    "ccx:check": "node scripts/prepare-ccx.js",
+    "ccx:prep": "npm run build:prod && npm run ccx:check",
     "uxp:load": "cd dist && uxp plugin load",
     "uxp:reload": "cd dist && uxp plugin reload",
     "uxp:watch": "cd dist && nodemon --exec \"uxp plugin reload\" -e js,css,html",

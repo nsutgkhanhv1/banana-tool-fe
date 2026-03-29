@@ -1,12 +1,12 @@
 {
-  "id": "Test-j0n49y",
-  "name": "Panel tool test",
+  "id": "Meko-banana-pro",
+  "name": "Meko Banana Pro",
   "version": "1.0.0",
   "main": "index.html",
   "manifestVersion": 5,
   "host": {
     "app": "PS",
-    "minVersion": "27.4.0"
+    "minVersion": "23.3.0"
   },
   "requiredPermissions": {
     "allowCodeGenerationFromStrings": true,
@@ -41,7 +41,7 @@
       "type": "command",
       "id": "showAbout",
       "label": {
-        "default": "About React Demo"
+        "default": "About Meko Media AI"
       },
       "shortcut": {
         "mac": "shift+cmd+A",

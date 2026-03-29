@@ -126,6 +126,7 @@ export const App = () => {
     const [bootStatus, setBootStatus] = useState("idle");
     const [authStatus, setAuthStatus] = useState("unknown");
     const [activeTab, setActiveTab] = useState(DEFAULT_TAB);
+    const [mountedTabs, setMountedTabs] = useState(() => [DEFAULT_TAB]);
     const [activeModal, setActiveModal] = useState(null);
     const [activeAuxScreen, setActiveAuxScreen] = useState(null);
     const [session, setSession] = useState(null);
@@ -335,6 +336,12 @@ export const App = () => {
     useEffect(() => {
         bootstrapShell();
     }, [bootstrapShell]);
+
+    useEffect(() => {
+        setMountedTabs((current) => (
+            current.includes(activeTab) ? current : [...current, activeTab]
+        ));
+    }, [activeTab]);
 
     useEffect(() => {
         persistTab(activeTab);
@@ -1165,6 +1172,15 @@ export const App = () => {
 
     const tabsMarkup = useMemo(() => (
         TABS.map((tab) => {
+            if (!mountedTabs.includes(tab.id)) {
+                return (
+                    <div
+                        key={tab.id}
+                        className={`tab-panel-frame ${activeTab === tab.id ? "is-active" : ""}`}
+                    />
+                );
+            }
+
             const TabComponent = tab.component;
 
             return (
@@ -1194,6 +1210,7 @@ export const App = () => {
         })
     ), [
         activeTab,
+        mountedTabs,
         submitPromptOptimize,
         submitPhucCheAnhGenerate,
         submitThayNenGenerate,
