@@ -5,7 +5,6 @@ const AUTHENTICATED_MENU_ITEMS = [
     { id: "account", label: "TÀI KHOẢN" },
     { id: "history", label: "LỊCH SỬ" },
     { id: "purchase", label: "MUA GÓI" },
-    { id: "settings", label: "CÀI ĐẶT" },
     { id: "support", label: "NHÓM ZALO SUPPORT" },
     { id: "logout", label: "ĐĂNG XUẤT" }
 ];
@@ -68,15 +67,10 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
                         </svg>
                         <span>{refreshStatus === "refreshing" ? "Đang làm mới" : "Làm mới"}</span>
                     </button>
-
+                    <button className="btn-pill" onClick={() => !actionsDisabled && onMenuToggle(!isMenuOpen)} disabled={actionsDisabled}>
+                        <span className="account-identifier">Tài khoản</span>
+                    </button>
                     <div className="account-dropdown-wrapper" ref={menuRef}>
-                        <button className="btn-pill account-trigger" onClick={() => !actionsDisabled && onMenuToggle(!isMenuOpen)} disabled={actionsDisabled}>
-                            <span className="account-identifier">Tài khoản</span>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                        </button>
-
                         {isMenuOpen ? (
                             <div className="account-dropdown">
                                 {menuItems.map((item) => (

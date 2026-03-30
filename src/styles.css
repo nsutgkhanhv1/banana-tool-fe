@@ -83,6 +83,12 @@ body {
     filter: blur(2px) saturate(0.8);
 }
 
+.app-container.has-modal .shell-body input,
+.app-container.has-modal .shell-body textarea,
+.app-container.has-modal .shell-body select {
+    visibility: hidden;
+}
+
 .app-container.has-modal .dropdown,
 .app-container.has-header-menu .dropdown {
     visibility: hidden;
@@ -352,7 +358,6 @@ body {
     align-items: center;
     gap: 8px;
     justify-content: space-between;
-    min-width: 180px;
 }
 
 .account-identifier {
