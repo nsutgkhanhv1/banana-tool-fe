@@ -917,12 +917,6 @@ export const ThayNenTab = ({
                     <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled || !canAddMore}>Layer hiện tại</button>
                 </div>
 
-                <div className="quick-layer-inline-actions">
-                    <button className="btn subtle quick-layer-secondary" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.VISIBLE_CANVAS)} disabled={actionsDisabled || !canAddMore}>
-                        Dùng toàn bộ canvas đang hiển thị
-                    </button>
-                </div>
-
                 {restoreNotice ? (
                     <div className="reference-note">{restoreNotice}</div>
                 ) : null}
@@ -948,8 +942,8 @@ export const ThayNenTab = ({
                 </div>
             </div>
 
-            <div className="section">
-                <div className="switch-row" style={{marginBottom: '10px'}}>
+            <div className="section section-row">
+                <div className="switch-row">
                     <div className="switch-label">Giữ chủ thể</div>
                     <label className="switch">
                         <input type="checkbox" checked={keepSubject} onChange={(e) => setKeepSubject(e.target.checked)} />
@@ -1041,7 +1035,7 @@ export const ThayNenTab = ({
                             <input
                                 type="text"
                                 className="prompt-memo-input"
-                                placeholder="Đặt tên gợi nhớ (tùy chọn)..."
+                                placeholder="Đặt tên gợi nhớ..."
                                 value={memoName}
                                 onChange={(e) => setMemoName(e.target.value)}
                             />
@@ -1074,9 +1068,6 @@ export const ThayNenTab = ({
                         <div className="switch-row prompt-enhancer-zoom-row">
                             <div>
                                 <div className="switch-label">Tự do thu phóng</div>
-                                <div className="prompt-enhancer-helper">
-                                    Cho phép AI crop và zoom linh hoạt để nền mới cân đối hơn mà vẫn giữ chủ thể tự nhiên.
-                                </div>
                             </div>
                             <label className="switch">
                                 <input type="checkbox" checked={allowFreeZoom} onChange={(e) => setAllowFreeZoom(e.target.checked)} />
@@ -1087,55 +1078,6 @@ export const ThayNenTab = ({
                         {PROMPT_ENHANCER_GROUPS.map((group) => {
                             const isOpen = Boolean(openPromptSections[group.id]);
                             const selectedOption = getPromptEnhancerOption(group.id, promptEnhancers[group.id]);
-
-                            // Icon mapping
-                            const GroupIcon = () => {
-                                switch (group.id) {
-                                    case 'concept':
-                                        return (
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path>
-                                                <path d="M9 18h6"></path>
-                                                <path d="M10 22h4"></path>
-                                            </svg>
-                                        );
-                                    case 'lighting':
-                                        return (
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path>
-                                                <path d="M9 18h6"></path>
-                                                <path d="M10 22h4"></path>
-                                            </svg>
-                                        );
-                                    case 'camera':
-                                        return (
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A0A0A0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                                <circle cx="12" cy="10" r="3"></circle>
-                                                <path d="M7 2h10"></path>
-                                            </svg>
-                                        );
-                                    case 'foreground':
-                                        return (
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8h-5.07A7 7 0 0 1 11 20z"></path>
-                                                <path d="M11 20c-1 0-2 0-3-1l-3-3a10 10 0 0 1 11-13"></path>
-                                            </svg>
-                                        );
-                                    case 'color':
-                                        return (
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <circle cx="13.5" cy="6.5" r=".5"></circle>
-                                                <circle cx="17.5" cy="10.5" r=".5"></circle>
-                                                <circle cx="8.5" cy="7.5" r=".5"></circle>
-                                                <circle cx="6.5" cy="12.5" r=".5"></circle>
-                                                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.92 0 1.7-.72 1.7-1.6 0-.44-.18-.84-.44-1.15-.27-.31-.44-.72-.44-1.15 0-.93.75-1.7 1.68-1.7H16c2.21 0 4-1.79 4-4 0-5.52-4.48-10-8-10z"></path>
-                                            </svg>
-                                        );
-                                    default:
-                                        return null;
-                                }
-                            };
 
                             return (
                                 <div key={group.id} className={`prompt-accordion ${isOpen ? 'open' : ''}`}>

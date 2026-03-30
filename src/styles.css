@@ -285,8 +285,7 @@ body {
 .header-container {
     display: flex;
     flex-direction: column;
-    margin: 16px 0 ;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 16px 0 0 0;
     width: 100%;
     position: relative;
     z-index: 1000;
@@ -297,14 +296,6 @@ body {
     width: 100%;
     height: auto;
     object-fit: contain;
-    margin: 16px 0;
-}
-
-.header-toolbar {
-    width: 100%;
-    background-color: #1e1e1e;
-    padding: 10px 16px;
-    border-top: 1px solid rgba(0, 0, 0, 0.3);
 }
 
 .header-controls {
@@ -360,9 +351,9 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 10px;
+    padding-bottom: 4px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    margin-bottom: 14px;
+    margin-bottom: 4px;
 }
 
 .prompt-toolbar-left {
@@ -467,8 +458,8 @@ body {
     align-items: start;
     justify-content: start;
     gap: 10px;
-    margin-bottom: 10px;
-    padding: 10px 4px;
+    margin-bottom: 6px;
+    padding: 4px;
     cursor: pointer;
     transition: background 0.2s;
 }
@@ -600,14 +591,14 @@ body {
 
 .prompt-footer-actions {
     display: flex;
-    gap: 6px;
+    gap: 4px;
 }
 
 .btn-footer-action {
     background: #2a2a2a;
     border: 1px solid #3a3a3a;
     color: #ffffff;
-    padding: 6px 12px;
+    padding: 4px;
     border-radius: 4px;
     font-size: 11px;
     font-weight: 600;
@@ -1154,9 +1145,7 @@ body {
 .tab-navigation {
     display: flex;
     gap: 8px; /* Closer together */
-    margin-bottom: 16px;
     background: rgba(255, 255, 255, 0.03);
-    padding: 4px;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -1254,6 +1243,13 @@ body {
     gap: 16px;
     padding: 4px;
     border-radius: 12px;
+}
+
+.section-row {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 16px;
+    width: 100%;
 }
 
 .section-header {
@@ -1454,11 +1450,12 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 14px;
-    padding: 10px 12px;
+    padding: 4px;
     background: rgba(255, 255, 255, 0.025);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.06);
+    flex: 1;
+    margin: 0 4px;
 }
 
 .switch-label {
@@ -1468,9 +1465,8 @@ body {
 }
 
 .segmented-control {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    display: flex;
+    align-items: center;
 }
 
 .segment-btn {
@@ -1478,11 +1474,12 @@ body {
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-muted);
     border-radius: 10px;
-    padding: 10px 8px;
+    padding: 2px;
     font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     transition: all var(--transition-speed);
+    flex: 1;
 }
 
 .segment-btn.active {

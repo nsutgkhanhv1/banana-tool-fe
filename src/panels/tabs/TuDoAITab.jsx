@@ -796,12 +796,6 @@ export const TuDoAITab = ({
                     <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled || !canAddMore}>Layer hiện tại</button>
                 </div>
 
-                <div className="quick-layer-inline-actions">
-                    <button className="btn subtle quick-layer-secondary" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.VISIBLE_CANVAS)} disabled={actionsDisabled || !canAddMore}>
-                        Dùng toàn bộ canvas đang hiển thị
-                    </button>
-                </div>
-
                 {restoreNotice ? (
                     <div className="reference-note">{restoreNotice}</div>
                 ) : null}
@@ -876,7 +870,7 @@ export const TuDoAITab = ({
                             <input
                                 type="text"
                                 className="prompt-memo-input"
-                                placeholder="Đặt tên gợi nhớ (tùy chọn)..."
+                                placeholder="Đặt tên gợi nhớ..."
                                 value={memoName}
                                 onChange={(e) => setMemoName(e.target.value)}
                             />

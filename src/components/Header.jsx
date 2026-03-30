@@ -46,7 +46,6 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
         <div className="header-container">
                 <img className="brand-banner-image" src={"/meko-header-logo.png"} alt="Meko Banana Pro" />
             
-            <div className="header-toolbar">
                 <div className="header-controls">
                     <button
                         className={`btn-pill credit-btn entitlement-${creditSummary.severity || "neutral"}`}
@@ -84,6 +83,5 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
                     </div>
                 </div>
             </div>
-        </div>
     );
 };
