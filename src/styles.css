@@ -64,7 +64,6 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    padding: 16px;
     box-sizing: border-box;
     position: relative;
     gap: 16px;
@@ -286,30 +285,19 @@ body {
 .header-container {
     display: flex;
     flex-direction: column;
-    margin: -16px -16px 16px -16px;
+    margin: 16px 0 ;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     width: 100%;
     position: relative;
     z-index: 1000;
 }
 
-.brand-banner {
-    background-color: #FFC107;
-    padding: 20px 16px;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.brand-banner h1 {
-    margin: 0;
-    color: #8B0000; /* Dark red */
-    font-size: 28px;
-    font-weight: 800;
-    letter-spacing: 4px;
-    font-family: 'Inter', sans-serif;
-    text-transform: uppercase;
+.brand-banner-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+    margin: 16px 0;
 }
 
 .header-toolbar {
@@ -3070,6 +3058,7 @@ input:checked + .slider:before {
 }
 
 .purchase-qr-card {
+    width: 100%;
     align-items: center;
     justify-content: center;
     gap: 10px;

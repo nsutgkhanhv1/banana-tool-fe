@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { formatPriceVnd, getPurchasePackagePrimaryValue } from "../lib/purchase.js";
 
+const SUPPORT_WEBSITE_URL = "https://www.mekomedia.vn/p/meko-banana-pro.html";
+const SUPPORT_ZALO_QR_SRC = "QR-zalo.jpg";
+
 const CloseButton = ({ onClick, title = "Đóng" }) => (
     <button type="button" className="btn modal-close" onClick={onClick} title={title}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1689,27 +1692,47 @@ const CreditSubscriptionModal = ({ summaries, helpers, refreshStatus, onClose, o
     );
 };
 
-const SupportModal = ({ supportContact, onClose }) => (
-    <ModalFrame
-        title="Liên hệ hỗ trợ"
-        subtitle="CTA dành riêng cho trường hợp subscription bị suspended hoặc cần can thiệp vận hành."
-        onClose={onClose}
-        canClose={true}
-    >
-        <div className="modal-stack">
-            <div className="account-detail-card">
-                <span className="summary-label">Kênh hỗ trợ</span>
-                <strong>{supportContact || "support@banana-tool.vn"}</strong>
-                <span>Chia sẻ email đăng nhập, thời điểm gặp lỗi và ảnh chụp trạng thái hiện tại để đội hỗ trợ xử lý nhanh hơn.</span>
+const SupportModal = ({ supportContact, onClose }) => {
+    const handleOpenSupportWebsite = () => {
+        if (typeof window !== "undefined" && typeof window.open === "function") {
+            window.open(SUPPORT_WEBSITE_URL, "_blank", "noopener,noreferrer");
+        }
+    };
+
+    return (
+        <ModalFrame
+            title="Liên hệ hỗ trợ"
+            subtitle="Bạn có thể vào website hỗ trợ hoặc quét QR Zalo để liên hệ nhanh với đội vận hành."
+            onClose={onClose}
+            canClose={true}
+        >
+            <div className="modal-stack">
+                <div className="account-detail-card">
+                    <span className="summary-label">Website hỗ trợ</span>
+                    <strong>{SUPPORT_WEBSITE_URL}</strong>
+                    <span>Mở trang hướng dẫn và thông tin hỗ trợ chính thức của Meko Banana Pro.</span>
+                    <div className="modal-actions">
+                        <button className="btn primary" onClick={handleOpenSupportWebsite}>
+                            Mở website hỗ trợ
+                        </button>
+                    </div>
+                </div>
+
+                <div className="account-detail-card purchase-qr-card">
+                    <span className="summary-label">QR Zalo hỗ trợ</span>
+                    <img className="purchase-qr-image" src={SUPPORT_ZALO_QR_SRC} alt="QR Zalo hỗ trợ Meko Banana Pro" />
+                    <span>Quét mã để vào Zalo hỗ trợ và trao đổi trực tiếp với đội ngũ.</span>
+                </div>
+
+                <div className="modal-actions">
+                    <button className="btn" onClick={onClose}>
+                        Đóng
+                    </button>
+                </div>
             </div>
-            <div className="modal-actions">
-                <button className="btn" onClick={onClose}>
-                    Đóng
-                </button>
-            </div>
-        </div>
-    </ModalFrame>
-);
+        </ModalFrame>
+    );
+};
 
 const RefreshConfirmModal = ({ onClose, onConfirmRefresh, refreshStatus }) => (
     <ModalFrame

@@ -55,19 +55,19 @@
         "default": "Meko Media AI"
       },
       "minimumSize": {
-        "width": 480,
+        "width": 500,
         "height": 860
       },
       "maximumSize": {
-        "width": 480,
+        "width": 500,
         "height": 860
       },
       "preferredDockedSize": {
-        "width": 480,
+        "width": 500,
         "height": 860
       },
       "preferredFloatingSize": {
-        "width": 480,
+        "width": 500,
         "height": 860
       },
       "icons": [

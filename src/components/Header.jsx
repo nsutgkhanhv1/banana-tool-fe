@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
-import { PLUGIN_DISPLAY_NAME } from "../lib/plugin-config.js";
+import React, { useEffect, useRef } from "react";
 
 const AUTHENTICATED_MENU_ITEMS = [
     { id: "account", label: "TÀI KHOẢN" },
     { id: "history", label: "LỊCH SỬ" },
     { id: "purchase", label: "MUA GÓI" },
-    { id: "support", label: "NHÓM ZALO SUPPORT" },
+    { id: "support", label: "ZALO / SUPPORT" },
     { id: "logout", label: "ĐĂNG XUẤT" }
 ];
 
@@ -45,9 +44,7 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
 
     return (
         <div className="header-container">
-            <div className="brand-banner">
-                <h1>MEKO BANANA PRO</h1>
-            </div>
+                <img className="brand-banner-image" src={"/meko-header-logo.png"} alt="Meko Banana Pro" />
             
             <div className="header-toolbar">
                 <div className="header-controls">
