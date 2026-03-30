@@ -71,7 +71,7 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
 
                     <div className="account-dropdown-wrapper" ref={menuRef}>
                         <button className="btn-pill account-trigger" onClick={() => !actionsDisabled && onMenuToggle(!isMenuOpen)} disabled={actionsDisabled}>
-                            <span className="account-identifier">{userSummary.identifier}</span>
+                            <span className="account-identifier">Tài khoản</span>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>

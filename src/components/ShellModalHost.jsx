@@ -52,6 +52,34 @@ const getEmailStatusLabel = (status) => {
     return "Chưa xác thực";
 };
 
+const getGeminiRoutingLabel = (mode) => {
+    if (mode === "user") {
+        return "Key riêng của bạn";
+    }
+
+    if (mode === "admin") {
+        return "Key riêng admin cấu hình";
+    }
+
+    return "API pool chung";
+};
+
+const getGeminiRoutingDescription = (summary) => {
+    if (!summary) {
+        return "Đang tải thông tin định tuyến Gemini API key.";
+    }
+
+    if (summary.effectiveRouting === "user") {
+        return "AI sẽ ưu tiên dùng key do bạn tự cấu hình trước, sau đó mới tới key admin gán riêng và pool chung.";
+    }
+
+    if (summary.effectiveRouting === "admin") {
+        return "Hiện chưa có key riêng của bạn nên hệ thống sẽ dùng key admin gán riêng trước khi rơi về pool chung.";
+    }
+
+    return "Hiện chưa có key riêng nào cho tài khoản này, nên AI sẽ dùng API pool chung.";
+};
+
 const FormField = ({ label, type = "text", value, onChange, placeholder, disabled, autoComplete, maxLength }) => (
     <label className="form-field">
         <span>{label}</span>
@@ -1714,6 +1742,11 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    const [geminiApiKey, setGeminiApiKey] = useState("");
+    const [geminiKeySummary, setGeminiKeySummary] = useState(null);
+    const [geminiKeyError, setGeminiKeyError] = useState("");
+    const [geminiKeyLoading, setGeminiKeyLoading] = useState(false);
+    const [geminiKeySubmitting, setGeminiKeySubmitting] = useState(false);
     const [notice, setNotice] = useState("");
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -1722,9 +1755,59 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
         setDisplayName(userProfile && userProfile.displayName ? userProfile.displayName : "");
     }, [userProfile && userProfile.displayName]);
 
+    useEffect(() => {
+        setGeminiApiKey("");
+    }, [userProfile && userProfile.id]);
+
     if (!userProfile) {
         return null;
     }
+
+    const loadGeminiKeySummary = async () => {
+        setGeminiKeyLoading(true);
+        setGeminiKeyError("");
+
+        try {
+            const summary = await authActions.getGeminiApiKeySummary();
+            setGeminiKeySummary(summary);
+            return summary;
+        } catch (nextError) {
+            setGeminiKeyError(getApiErrorMessage(nextError));
+            return null;
+        } finally {
+            setGeminiKeyLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        let active = true;
+
+        const run = async () => {
+            setGeminiKeyLoading(true);
+            setGeminiKeyError("");
+
+            try {
+                const summary = await authActions.getGeminiApiKeySummary();
+                if (active) {
+                    setGeminiKeySummary(summary);
+                }
+            } catch (nextError) {
+                if (active) {
+                    setGeminiKeyError(getApiErrorMessage(nextError));
+                }
+            } finally {
+                if (active) {
+                    setGeminiKeyLoading(false);
+                }
+            }
+        };
+
+        run();
+
+        return () => {
+            active = false;
+        };
+    }, [authActions.getGeminiApiKeySummary, userProfile.id]);
 
     const handleSaveDisplayName = async () => {
         setSubmitting(true);
@@ -1892,6 +1975,59 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
         }
     };
 
+    const handleSaveGeminiApiKey = async () => {
+        const trimmedApiKey = geminiApiKey.trim();
+
+        if (trimmedApiKey.length < 8) {
+            setGeminiKeyError("Gemini API key phải có ít nhất 8 ký tự.");
+            return;
+        }
+
+        setGeminiKeySubmitting(true);
+        setGeminiKeyError("");
+
+        try {
+            const summary = await authActions.saveGeminiApiKey({ apiKey: trimmedApiKey });
+            setGeminiKeySummary(summary);
+            setGeminiApiKey("");
+            setNotice("Đã cập nhật Gemini API key riêng. AI sẽ ưu tiên key này trước.");
+        } catch (nextError) {
+            setGeminiKeyError(getApiErrorMessage(nextError));
+        } finally {
+            setGeminiKeySubmitting(false);
+        }
+    };
+
+    const handleRemoveGeminiApiKey = async () => {
+        setGeminiKeySubmitting(true);
+        setGeminiKeyError("");
+
+        try {
+            const summary = await authActions.removeGeminiApiKey();
+            setGeminiKeySummary(summary);
+            setGeminiApiKey("");
+            setNotice("Đã xóa Gemini API key riêng. Hệ thống sẽ quay lại key admin hoặc pool chung.");
+        } catch (nextError) {
+            setGeminiKeyError(getApiErrorMessage(nextError));
+        } finally {
+            setGeminiKeySubmitting(false);
+        }
+    };
+
+    const handleTestGeminiApiKey = async () => {
+        setGeminiKeySubmitting(true);
+        setGeminiKeyError("");
+
+        try {
+            await authActions.testGeminiApiKey();
+            await loadGeminiKeySummary();
+        } catch (nextError) {
+            setGeminiKeyError(getApiErrorMessage(nextError));
+        } finally {
+            setGeminiKeySubmitting(false);
+        }
+    };
+
     const renderOverview = () => (
         <div className="modal-stack">
             {userProfile.emailVerificationStatus === "unverified" ? (
@@ -1927,6 +2063,8 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
             {notice ? <div className="success-banner">{notice}</div> : null}
             <InlineError message={error} />
 
+            <div className="summary-grid">
+
                 <div className="summary-tile">
                     <span className="summary-label">Plan hiện tại</span>
                     <strong>{summaries.planSummary.name}</strong>
@@ -1936,6 +2074,12 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                     <span className="summary-label">Credit</span>
                     <strong>{summaries.creditSummary.label}</strong>
                     <span>{summaries.creditSummary.detail}</span>
+                </div>
+
+                <div className="summary-tile">
+                    <span className="summary-label">Định tuyến AI</span>
+                    <strong>{getGeminiRoutingLabel(geminiKeySummary && geminiKeySummary.effectiveRouting)}</strong>
+                    <span>{getGeminiRoutingDescription(geminiKeySummary)}</span>
                 </div>
 
                 <div className="summary-tile">
@@ -1953,6 +2097,8 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                     <strong>{getEmailStatusLabel(userProfile.emailVerificationStatus)}</strong>
                     <span>{userProfile.emailVerified ? "Đã xác thực" : "Chưa xác thực"}</span>
                 </div>
+
+            </div>
 
             <div className="account-management-stack">
                 <div className="auth-form-card">
@@ -2090,6 +2236,80 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
                         <button className="btn primary" onClick={handleChangePassword} disabled={submitting}>
                             {submitting ? "Đang lưu..." : "Đổi mật khẩu"}
                         </button>
+                    </div>
+                </div>
+                <div className="auth-form-card">
+                    <div className="account-section-copy">
+                        <span className="pill-tag">AI Key</span>
+                        <h3>Gemini API key riêng</h3>
+                        <p>Thứ tự ưu tiên khi dùng AI: key bạn tự cấu hình, sau đó key riêng admin cấu hình cho tài khoản, cuối cùng mới tới API pool chung.</p>
+                    </div>
+
+                    <div className="account-detail-card account-inline-summary">
+                        <span className="summary-label">Nhánh đang ưu tiên</span>
+                        <strong>{getGeminiRoutingLabel(geminiKeySummary && geminiKeySummary.effectiveRouting)}</strong>
+                        <span>{getGeminiRoutingDescription(geminiKeySummary)}</span>
+                    </div>
+
+                    <div className="summary-grid">
+                        <div className="summary-tile">
+                            <span className="summary-label">Key của bạn</span>
+                            <strong>
+                                {geminiKeyLoading
+                                    ? "Đang tải..."
+                                    : geminiKeySummary && geminiKeySummary.userKey && geminiKeySummary.userKey.hasKey
+                                        ? (geminiKeySummary.userKey.keyHint || "Đã cấu hình")
+                                        : "Chưa cấu hình"}
+                            </strong>
+                            <span>
+                                {geminiKeySummary && geminiKeySummary.userKey && geminiKeySummary.userKey.updatedAt
+                                    ? `Cập nhật gần nhất: ${helpers.formatRelativeDate(geminiKeySummary.userKey.updatedAt)}`
+                                    : "Nếu có key riêng, AI sẽ ưu tiên dùng key này trước."}
+                            </span>
+                        </div>
+                        <div className="summary-tile">
+                            <span className="summary-label">Key admin dự phòng</span>
+                            <strong>
+                                {geminiKeyLoading
+                                    ? "Đang tải..."
+                                    : geminiKeySummary && geminiKeySummary.adminKey && geminiKeySummary.adminKey.hasKey
+                                        ? "Đã cấu hình"
+                                        : "Chưa có"}
+                            </strong>
+                            <span>
+                                {geminiKeySummary && geminiKeySummary.adminKey && geminiKeySummary.adminKey.updatedAt
+                                    ? `Admin cập nhật: ${helpers.formatRelativeDate(geminiKeySummary.adminKey.updatedAt)}`
+                                    : "Key này chỉ được dùng khi bạn chưa có key riêng hoặc key riêng không khả dụng."}
+                            </span>
+                        </div>
+                    </div>
+
+                    <PasswordField
+                        label="Gemini API key của bạn"
+                        value={geminiApiKey}
+                        onChange={setGeminiApiKey}
+                        autoComplete="off"
+                        placeholder="Dán Gemini API key riêng của bạn"
+                        disabled={geminiKeySubmitting}
+                    />
+
+                    {geminiKeyError ? <div className="form-error">{geminiKeyError}</div> : null}
+
+                    <div className="modal-actions">
+                        <button className="btn primary" onClick={handleSaveGeminiApiKey} disabled={geminiKeySubmitting}>
+                            {geminiKeySubmitting ? "Đang lưu..." : (geminiKeySummary && geminiKeySummary.userKey && geminiKeySummary.userKey.hasKey ? "Cập nhật key riêng" : "Lưu key riêng")}
+                        </button>
+                        <button className="btn" onClick={handleTestGeminiApiKey} disabled={geminiKeySubmitting || !geminiKeySummary || !geminiKeySummary.userKey || !geminiKeySummary.userKey.hasKey}>
+                            {geminiKeySubmitting ? "Đang test..." : "Test key riêng"}
+                        </button>
+                        <button className="btn subtle" onClick={() => void loadGeminiKeySummary()} disabled={geminiKeySubmitting || geminiKeyLoading}>
+                            {geminiKeyLoading ? "Đang tải..." : "Làm mới trạng thái"}
+                        </button>
+                        {geminiKeySummary && geminiKeySummary.userKey && geminiKeySummary.userKey.hasKey ? (
+                            <button className="btn danger" onClick={handleRemoveGeminiApiKey} disabled={geminiKeySubmitting}>
+                                Xóa key riêng
+                            </button>
+                        ) : null}
                     </div>
                 </div>
             </div>

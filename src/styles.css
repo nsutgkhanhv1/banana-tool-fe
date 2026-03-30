@@ -1194,11 +1194,16 @@ body {
 }
 
 .tab-btn.active {
-    color: #ffffff; 
+    color: var(--primary-text);
     font-weight: 600;
-    background: rgba(255, 255, 255, 0.1);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+    background: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(255, 179, 0, 0.28);
+    text-shadow: none;
+}
+
+.tab-btn.active:hover {
+    color: var(--primary-text);
+    background: var(--primary-hover);
 }
 
 /* Optional glowing dot instead of underline for a modern look */

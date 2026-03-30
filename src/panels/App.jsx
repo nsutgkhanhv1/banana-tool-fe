@@ -887,6 +887,46 @@ export const App = () => {
         return data;
     }, [handleSessionChange, session, showToast]);
 
+    const getGeminiApiKeySummary = useCallback(async () => (
+        requestJson("/me/gemini-api-key", {
+            method: "GET"
+        }, session, handleSessionChange)
+    ), [handleSessionChange, session]);
+
+    const saveGeminiApiKey = useCallback(async ({ apiKey }) => {
+        const data = await requestJson("/me/gemini-api-key", {
+            method: "PATCH",
+            body: JSON.stringify({
+                provider: "google-banana",
+                apiKey
+            })
+        }, session, handleSessionChange);
+
+        showToast("Đã lưu Gemini API key riêng của bạn.", "success");
+        return data;
+    }, [handleSessionChange, session, showToast]);
+
+    const removeGeminiApiKey = useCallback(async () => {
+        const data = await requestJson("/me/gemini-api-key", {
+            method: "DELETE"
+        }, session, handleSessionChange);
+
+        showToast("Đã xóa Gemini API key riêng.", "info");
+        return data;
+    }, [handleSessionChange, session, showToast]);
+
+    const testGeminiApiKey = useCallback(async () => {
+        const data = await requestJson("/me/gemini-api-key/test", {
+            method: "POST",
+            body: JSON.stringify({})
+        }, session, handleSessionChange);
+
+        showToast("Gemini API key riêng hoạt động bình thường.", "success", {
+            detail: `Key ${data.keyHint || "masked"} đã generate ảnh test thành công trong ${data.latencyMs} ms.`
+        });
+        return data;
+    }, [handleSessionChange, session, showToast]);
+
     const submitGenerateRequest = useCallback(async ({ path, body }) => {
         if (!session) {
             openAuthModal("login");
@@ -1333,7 +1373,11 @@ export const App = () => {
                     startEmailChange,
                     confirmEmailChange,
                     cancelPendingEmailChange,
-                    changePassword: submitPasswordChange
+                    changePassword: submitPasswordChange,
+                    getGeminiApiKeySummary,
+                    saveGeminiApiKey,
+                    removeGeminiApiKey,
+                    testGeminiApiKey
                 }}
                 helpers={{
                     formatRelativeDate,
