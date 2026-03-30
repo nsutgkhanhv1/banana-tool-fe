@@ -6,13 +6,10 @@ import {
     createResultImageRecord,
     performResultInsert
 } from '../../lib/result-insert.js';
-import { RestorationMaskEditor } from '../../components/RestorationMaskEditor.jsx';
 import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
 
 const TOOL_KEY = 'phucche';
 const MAX_SOURCE_IMAGES = 1;
-const FACE_REGION_MAX_ITEMS = 5;
-const FACE_REGION_MIN_SIZE = 0.04;
 
 const RESTORE_PRESETS = [
     { id: 'comprehensive_restore', label: 'Phục chế toàn diện' },
@@ -135,11 +132,6 @@ export const PhucCheTab = ({
     const [isOptimizingPrompt, setIsOptimizingPrompt] = useState(false);
     const [showQuickLayerOptions, setShowQuickLayerOptions] = useState(false);
     const [showAdvancedPrompt, setShowAdvancedPrompt] = useState(false);
-    const [showFaceRegionEditor, setShowFaceRegionEditor] = useState(false);
-    const [showMaskEditor, setShowMaskEditor] = useState(false);
-    const [facePriorityRegions, setFacePriorityRegions] = useState([]);
-    const [selectedFaceRegionId, setSelectedFaceRegionId] = useState(null);
-    const [repairMask, setRepairMask] = useState(null);
     const [compareView, setCompareView] = useState('after');
     const {
         items,
@@ -161,10 +153,6 @@ export const PhucCheTab = ({
 
     const activeImage = useMemo(() => items.find((image) => image.id === activeImageId) || null, [activeImageId, items]);
     const canSubmit = Boolean(activeImage);
-    const selectedFaceRegion = useMemo(
-        () => facePriorityRegions.find((region) => region.id === selectedFaceRegionId) || null,
-        [facePriorityRegions, selectedFaceRegionId]
-    );
     const comparePreviewUrl = compareView === 'before' && result && result.sourcePreviewUrl
         ? result.sourcePreviewUrl
         : result
@@ -187,11 +175,6 @@ export const PhucCheTab = ({
 
             try {
                 await addFromClipboard();
-                setFacePriorityRegions([]);
-                setSelectedFaceRegionId(null);
-                setShowFaceRegionEditor(false);
-                setRepairMask(null);
-                setShowMaskEditor(false);
                 setErrorMessage('');
                 if (event && typeof event.preventDefault === 'function') {
                     event.preventDefault();
@@ -243,13 +226,6 @@ export const PhucCheTab = ({
             setPrompt(payload.prompt || '');
             setShowAdvancedPrompt(Boolean(payload.prompt));
             setShowQuickLayerOptions(false);
-            const restoredFaceRegions = sanitizeFacePriorityRegions(payload.facePriorityRegions);
-            setFacePriorityRegions(restoredFaceRegions);
-            setSelectedFaceRegionId(restoredFaceRegions[0] ? restoredFaceRegions[0].id : null);
-            setShowFaceRegionEditor(restoredFaceRegions.length > 0);
-            const restoredRepairMask = sanitizeRepairMask(payload.repairMask);
-            setRepairMask(restoredRepairMask);
-            setShowMaskEditor(Boolean(restoredRepairMask));
 
             const restored = await restoreFromSnapshots({
                 snapshots: payload.referenceImages || [],
@@ -291,15 +267,6 @@ export const PhucCheTab = ({
             colorize,
             fidelityMode,
             restorationIntensity,
-            ...(facePriorityRegions.length ? {
-                facePriorityRegions: facePriorityRegions.map((region) => ({
-                    x: region.x,
-                    y: region.y,
-                    width: region.width,
-                    height: region.height
-                }))
-            } : {}),
-            ...(repairMask ? { repairMask } : {}),
             ...(colorize ? { colorTone } : {}),
             clientRequestId: `phuc-che-anh-${Date.now()}`,
             appVersion: 'uxp-dev'
@@ -364,9 +331,7 @@ export const PhucCheTab = ({
                     colorize,
                     fidelityMode,
                     restorationIntensity,
-                    colorTone: colorize ? colorTone : '',
-                    facePriorityRegionCount: facePriorityRegions.length,
-                    hasRepairMask: Boolean(repairMask)
+                    colorTone: colorize ? colorTone : ''
                 },
                 clientRequestId: `phuc-che-anh-optimize-${Date.now()}`,
                 appVersion: 'uxp-dev'
@@ -396,17 +361,6 @@ export const PhucCheTab = ({
         setIsLoading(true);
 
         try {
-            const faceRegionError = validateFacePriorityRegions(facePriorityRegions);
-            const repairMaskError = validateRepairMask(repairMask);
-
-            if (faceRegionError) {
-                throw new Error(faceRegionError);
-            }
-
-            if (repairMaskError) {
-                throw new Error(repairMaskError);
-            }
-
             const payload = createGeneratePayload();
             const sourcePreviewUrl = activeImage ? activeImage.previewUrl : '';
             const sourceDisplayName = activeImage ? activeImage.displayName : '';
@@ -476,14 +430,11 @@ export const PhucCheTab = ({
                         fidelityMode: payload.fidelityMode,
                         restorationIntensity: payload.restorationIntensity,
                         colorTone: payload.colorTone || null,
-                        facePriorityRegions: payload.facePriorityRegions || [],
-                        repairMask: payload.repairMask || null
                     },
                     summaryLines: [
                         `Preset: ${RESTORE_PRESETS.find((option) => option.id === payload.preset)?.label || payload.preset}`,
                         `Mode: ${RESTORE_MODES.find((option) => option.id === payload.mode)?.label || payload.mode}`,
                         `Kích thước: ${payload.size}`,
-                        `Vùng mặt ưu tiên: ${payload.facePriorityRegions && payload.facePriorityRegions.length ? `${payload.facePriorityRegions.length} vùng` : 'Auto'}`,
                         `Khôi phục mặt: ${payload.enhanceFace ? 'Bật' : 'Tắt'}`,
                         `Khử nhiễu: ${payload.denoise ? 'Bật' : 'Tắt'}`,
                         `Tô màu: ${payload.colorize ? `Bật${payload.colorTone ? ` (${COLOR_TONE_OPTIONS.find((option) => option.id === payload.colorTone)?.label || payload.colorTone})` : ''}` : 'Tắt'}`
@@ -510,8 +461,6 @@ export const PhucCheTab = ({
                         fidelityMode: payload.fidelityMode,
                         restorationIntensity: payload.restorationIntensity,
                         colorTone: payload.colorTone || '',
-                        facePriorityRegions: payload.facePriorityRegions || [],
-                        repairMask: payload.repairMask || null,
                         activeImageId,
                         referenceImages: items.map((image) => ({
                             id: image.id,
@@ -594,11 +543,6 @@ export const PhucCheTab = ({
 
         try {
             await addFromFileEntry();
-            setFacePriorityRegions([]);
-            setSelectedFaceRegionId(null);
-            setShowFaceRegionEditor(false);
-            setRepairMask(null);
-            setShowMaskEditor(false);
         } catch (error) {
             setErrorMessage(error && error.message ? error.message : 'Không thể đọc ảnh đầu vào từ máy.');
         }
@@ -615,11 +559,6 @@ export const PhucCheTab = ({
         try {
             await addFromQuickLayer(quickLayerMode);
             setShowQuickLayerOptions(false);
-            setFacePriorityRegions([]);
-            setSelectedFaceRegionId(null);
-            setShowFaceRegionEditor(false);
-            setRepairMask(null);
-            setShowMaskEditor(false);
         } catch (error) {
             setErrorMessage(error && error.message ? error.message : 'Không thể lấy ảnh từ Photoshop.');
         }
@@ -643,26 +582,6 @@ export const PhucCheTab = ({
         event.stopPropagation();
         setErrorMessage('');
         removeImage(imageId);
-        setFacePriorityRegions([]);
-        setSelectedFaceRegionId(null);
-        setShowFaceRegionEditor(false);
-        setRepairMask(null);
-        setShowMaskEditor(false);
-    };
-
-    const handleDeleteSelectedFaceRegion = () => {
-        if (!selectedFaceRegion) {
-            return;
-        }
-
-        const nextRegions = facePriorityRegions.filter((region) => region.id !== selectedFaceRegion.id);
-        setFacePriorityRegions(nextRegions);
-        setSelectedFaceRegionId(nextRegions[0] ? nextRegions[0].id : null);
-    };
-
-    const handleResetFaceRegions = () => {
-        setFacePriorityRegions([]);
-        setSelectedFaceRegionId(null);
     };
 
     const handlePresetChange = (nextPreset) => {

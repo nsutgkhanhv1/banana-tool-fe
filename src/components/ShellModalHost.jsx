@@ -223,8 +223,18 @@ const AuthModal = ({ config, authActions, onClose }) => {
         setOtp("");
     };
 
+    const getNormalizedEmail = () => {
+        const normalizedEmail = email.trim();
+        if (normalizedEmail !== email) {
+            setEmail(normalizedEmail);
+        }
+        return normalizedEmail;
+    };
+
     const handleLogin = async () => {
-        if (!isValidEmail(email)) {
+        const normalizedEmail = getNormalizedEmail();
+
+        if (!isValidEmail(normalizedEmail)) {
             setError("Email không hợp lệ.");
             return;
         }
@@ -238,7 +248,7 @@ const AuthModal = ({ config, authActions, onClose }) => {
         setError("");
 
         try {
-            await authActions.login({ email, password });
+            await authActions.login({ email: normalizedEmail, password });
         } catch (nextError) {
             setError(getApiErrorMessage(nextError));
         } finally {
@@ -247,7 +257,9 @@ const AuthModal = ({ config, authActions, onClose }) => {
     };
 
     const handleRegister = async () => {
-        if (!isValidEmail(email)) {
+        const normalizedEmail = getNormalizedEmail();
+
+        if (!isValidEmail(normalizedEmail)) {
             setError("Email không hợp lệ.");
             return;
         }
@@ -266,9 +278,9 @@ const AuthModal = ({ config, authActions, onClose }) => {
         setError("");
 
         try {
-            await authActions.register({ email, password });
+            await authActions.register({ email: normalizedEmail, password });
             moveTo("verify-email", {
-                email,
+                email: normalizedEmail,
                 notice: "Tài khoản đã được tạo ở trạng thái chưa xác thực email."
             });
         } catch (nextError) {
@@ -279,7 +291,9 @@ const AuthModal = ({ config, authActions, onClose }) => {
     };
 
     const handleResendVerifyOtp = async () => {
-        if (!isValidEmail(email)) {
+        const normalizedEmail = getNormalizedEmail();
+
+        if (!isValidEmail(normalizedEmail)) {
             setError("Email không hợp lệ.");
             return;
         }
@@ -288,7 +302,7 @@ const AuthModal = ({ config, authActions, onClose }) => {
         setError("");
 
         try {
-            await authActions.resendVerifyEmail({ email });
+            await authActions.resendVerifyEmail({ email: normalizedEmail });
             setNotice("OTP mới đã được gửi tới email của bạn.");
         } catch (nextError) {
             setError(getApiErrorMessage(nextError));
@@ -298,6 +312,8 @@ const AuthModal = ({ config, authActions, onClose }) => {
     };
 
     const handleVerifyEmail = async () => {
+        const normalizedEmail = getNormalizedEmail();
+
         if (!isValidOtp(otp)) {
             setError("OTP phải gồm đúng 6 chữ số.");
             return;
@@ -307,9 +323,9 @@ const AuthModal = ({ config, authActions, onClose }) => {
         setError("");
 
         try {
-            await authActions.verifyEmail({ email, otp });
+            await authActions.verifyEmail({ email: normalizedEmail, otp });
             moveTo("login", {
-                email,
+                email: normalizedEmail,
                 notice: "Email đã được xác thực. Bạn có thể đăng nhập ngay."
             });
         } catch (nextError) {
@@ -320,7 +336,9 @@ const AuthModal = ({ config, authActions, onClose }) => {
     };
 
     const handleForgotPassword = async () => {
-        if (!isValidEmail(email)) {
+        const normalizedEmail = getNormalizedEmail();
+
+        if (!isValidEmail(normalizedEmail)) {
             setError("Email không hợp lệ.");
             return;
         }
@@ -329,9 +347,9 @@ const AuthModal = ({ config, authActions, onClose }) => {
         setError("");
 
         try {
-            await authActions.requestPasswordReset({ email });
+            await authActions.requestPasswordReset({ email: normalizedEmail });
             moveTo("reset-password", {
-                email,
+                email: normalizedEmail,
                 notice: "Nếu email tồn tại, OTP đặt lại mật khẩu đã được gửi."
             });
         } catch (nextError) {
@@ -342,7 +360,9 @@ const AuthModal = ({ config, authActions, onClose }) => {
     };
 
     const handleResetPassword = async () => {
-        if (!isValidEmail(email)) {
+        const normalizedEmail = getNormalizedEmail();
+
+        if (!isValidEmail(normalizedEmail)) {
             setError("Email không hợp lệ.");
             return;
         }
@@ -367,12 +387,12 @@ const AuthModal = ({ config, authActions, onClose }) => {
 
         try {
             await authActions.resetPassword({
-                email,
+                email: normalizedEmail,
                 otp,
                 newPassword: password
             });
             moveTo("login", {
-                email,
+                email: normalizedEmail,
                 notice: "Đặt lại mật khẩu thành công. Hãy đăng nhập với mật khẩu mới."
             });
         } catch (nextError) {
