@@ -317,7 +317,7 @@ export const ThayNenTab = ({
     const [historyNotice, setHistoryNotice] = useState('');
     const [aspectRatio, setAspectRatio] = useState('3:4');
     const [size, setSize] = useState('1K');
-    const [backgroundPreset, setBackgroundPreset] = useState('studio');
+    const [backgroundPreset, setBackgroundPreset] = useState('');
     const [prompt, setPrompt] = useState('');
     const [allowFreeZoom, setAllowFreeZoom] = useState(false);
     const [promptEnhancers, setPromptEnhancers] = useState(() => createEmptyPromptEnhancers());
@@ -381,6 +381,7 @@ export const ThayNenTab = ({
         () => buildPromptEnhancerFragments({ allowFreeZoom, promptEnhancers }),
         [allowFreeZoom, promptEnhancers]
     );
+    const backgroundPresetPrompt = backgroundPreset ? BACKGROUND_PRESET_PROMPTS[backgroundPreset] || '' : '';
     const finalPrompt = useMemo(
         () => [prompt.trim(), ...promptEnhancerFragments].filter(Boolean).join('\n'),
         [prompt, promptEnhancerFragments]
@@ -460,7 +461,7 @@ export const ThayNenTab = ({
             setHistoryNotice(`Đã nạp cấu hình từ lịch sử cho ${historyRestoreRequest.featureLabel}.`);
             setAspectRatio(payload.aspectRatio || '3:4');
             setSize(payload.size || '1K');
-            setBackgroundPreset(payload.backgroundPreset || 'studio');
+            setBackgroundPreset(typeof payload.backgroundPreset === 'string' ? payload.backgroundPreset : '');
             setPrompt(payload.prompt || '');
             setAllowFreeZoom(Boolean(payload.allowFreeZoom));
             setPromptEnhancers(normalizePromptEnhancers(payload.promptEnhancers));
@@ -503,7 +504,7 @@ export const ThayNenTab = ({
             },
             ratio: aspectRatio,
             size,
-            preset: backgroundPreset,
+            preset: backgroundPreset || undefined,
             prompt: finalPrompt.trim(),
             keepSubject,
             matchLighting,
@@ -588,7 +589,9 @@ export const ThayNenTab = ({
                     summaryLines: [
                         ...(allowFreeZoom ? ['Tự do thu phóng: Bật'] : []),
                         ...selectedPromptEnhancerSummaries.map((item) => `${item.groupLabel}: ${item.optionLabel}`),
-                        `Preset: ${BACKGROUND_PRESETS.find((preset) => preset.id === payload.preset)?.label || payload.preset}`,
+                        ...(payload.preset
+                            ? [`Preset: ${BACKGROUND_PRESETS.find((preset) => preset.id === payload.preset)?.label || payload.preset}`]
+                            : []),
                         `Tỉ lệ: ${payload.ratio}`,
                         `Kích thước: ${payload.size}`,
                         `Giữ chủ thể: ${payload.keepSubject ? 'Bật' : 'Tắt'}`,
@@ -736,8 +739,7 @@ export const ThayNenTab = ({
     };
 
     const handlePresetChange = (presetId) => {
-        setBackgroundPreset(presetId);
-        setPrompt(BACKGROUND_PRESET_PROMPTS[presetId] || '');
+        setBackgroundPreset((currentPreset) => (currentPreset === presetId ? '' : presetId));
     };
 
     const handleSavePrompt = () => {
@@ -1116,7 +1118,7 @@ export const ThayNenTab = ({
                             );
                         })}
 
-                        {(allowFreeZoom || selectedPromptEnhancerSummaries.length > 0) ? (
+                        {(backgroundPresetPrompt || allowFreeZoom || selectedPromptEnhancerSummaries.length > 0) ? (
                             <div className="prompt-assembly-note">
                                 Prompt gửi AI sẽ tự ghép các lựa chọn này khi generate để mô tả rõ hơn về concept, ánh sáng, góc chụp và màu sắc.
                             </div>

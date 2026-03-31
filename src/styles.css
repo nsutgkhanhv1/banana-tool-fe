@@ -702,6 +702,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    padding-left: 6px;
 }
 
 .function-accordion-item {
@@ -720,7 +721,7 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px;
+    padding: 6px;
     cursor: pointer;
 }
 
@@ -746,14 +747,14 @@ body {
 }
 
 .function-accordion-body {
-    padding: 8px 12px 12px;
+    padding: 4px 6px 6px;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .prompt-function-body-stack {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 5px;
 }
 
 .prompt-function-select {
@@ -762,7 +763,7 @@ body {
     border-radius: 8px;
     color: var(--text-main);
     font-size: 12px;
-    min-height: 42px;
+    min-height: 30px;
     width: 100%;
 }
 
@@ -784,15 +785,14 @@ body {
 
 .prompt-function-button {
     width: 100%;
-    min-height: 56px;
-    padding: 10px 12px;
+    min-height: 32px;
+    padding: 4px 6px;
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-main);
     font-size: 12px;
     font-weight: 600;
-    line-height: 1.35;
     cursor: pointer;
     transition: all var(--transition-speed);
 }
@@ -808,9 +808,7 @@ body {
 }
 
 .prompt-function-toggle-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    display: flex
 }
 
 .prompt-function-switch {

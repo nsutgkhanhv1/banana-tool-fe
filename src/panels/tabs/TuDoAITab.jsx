@@ -931,7 +931,6 @@ export const TuDoAITab = ({
                 </select>
             </div>
 
-                                <div className="prompt-function-box">
                         <div className="prompt-function-accordion-list">
                             <div className={`function-accordion-item ${isFunctionAccordionOpen ? 'open' : ''}`}>
                                 <button
@@ -1002,7 +1001,6 @@ export const TuDoAITab = ({
                                 </label>
                             </div>
                         </div>
-                    </div>
                     
             {errorMessage ? (
                 <div className="section">

@@ -687,15 +687,15 @@ export const PhucCheTab = ({
             </div>
 
             <div className="section">
-                <div className="switch-row" style={{marginBottom: '10px'}}>
+                <div className="switch-row" style={{marginBottom: '4px'}}>
                     <div className="switch-label">Khôi phục chi tiết khuôn mặt</div>
                     <label className="switch">
                         <input type="checkbox" checked={enhanceFace} onChange={(event) => setEnhanceFace(event.target.checked)} />
                         <span className="slider"></span>
                     </label>
                 </div>
-
-                <div className="switch-row" style={{marginBottom: '10px'}}>
+             <div className='section-row'>
+                  <div className="switch-row" >
                     <div className="switch-label">Giảm nhiễu hạt</div>
                     <label className="switch">
                         <input type="checkbox" checked={denoise} onChange={(event) => setDenoise(event.target.checked)} />
@@ -710,6 +710,8 @@ export const PhucCheTab = ({
                         <span className="slider"></span>
                     </label>
                 </div>
+                </div>               
+              
             </div>
 
             <div className="section">
