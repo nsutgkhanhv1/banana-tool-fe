@@ -199,6 +199,36 @@ const buildPromptFragments = ({ selectedFunctionId, functionCategoryId, preserve
     return fragments;
 };
 
+const buildFunctionOptionRows = (options) => {
+    const rows = [];
+    let currentRow = [];
+
+    options.forEach((option) => {
+        if (option.fullWidth) {
+            if (currentRow.length) {
+                rows.push(currentRow);
+                currentRow = [];
+            }
+
+            rows.push([option]);
+            return;
+        }
+
+        currentRow.push(option);
+
+        if (currentRow.length === 2) {
+            rows.push(currentRow);
+            currentRow = [];
+        }
+    });
+
+    if (currentRow.length) {
+        rows.push(currentRow);
+    }
+
+    return rows;
+};
+
 const mapSourceTypeToApiSource = (sourceType) => {
     if (sourceType === 'quick_layer_canvas') {
         return 'photoshop-composite';
@@ -278,6 +308,10 @@ export const TuDoAITab = ({
     const selectedFunction = useMemo(
         () => getFunctionOption(functionCategoryId, selectedFunctionId),
         [functionCategoryId, selectedFunctionId]
+    );
+    const functionOptionRows = useMemo(
+        () => buildFunctionOptionRows(FUNCTION_CATEGORY_MAP[functionCategoryId]?.options || []),
+        [functionCategoryId]
     );
 
     useEffect(() => {
@@ -961,21 +995,28 @@ export const TuDoAITab = ({
                                         </select>
 
                                         <div className="prompt-function-button-list">
-                                            {(FUNCTION_CATEGORY_MAP[functionCategoryId]?.options || []).map((option) => (
+                                            {functionOptionRows.map((row, rowIndex) => (
                                                 <div
-                                                    key={option.id}
-                                                    className={`prompt-function-cell ${option.fullWidth ? 'full-span' : ''}`}
+                                                    key={`${functionCategoryId}-${rowIndex}`}
+                                                    className={`prompt-function-row ${row.length === 1 ? 'single' : ''}`}
                                                 >
-                                                    <button
-                                                        type="button"
-                                                        className={`prompt-function-button ${selectedFunctionId === option.id ? 'active' : ''}`}
-                                                        onClick={() => {
-                                                            setFunctionCategoryId(functionCategoryId);
-                                                            handleSelectFunction(option.id);
-                                                        }}
-                                                    >
-                                                        {option.label}
-                                                    </button>
+                                                    {row.map((option) => (
+                                                        <div
+                                                            key={option.id}
+                                                            className="prompt-function-cell"
+                                                        >
+                                                            <button
+                                                                type="button"
+                                                                className={`prompt-function-button ${selectedFunctionId === option.id ? 'active' : ''}`}
+                                                                onClick={() => {
+                                                                    setFunctionCategoryId(functionCategoryId);
+                                                                    handleSelectFunction(option.id);
+                                                                }}
+                                                            >
+                                                                {option.label}
+                                                            </button>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             ))}
                                         </div>

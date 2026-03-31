@@ -1713,9 +1713,22 @@ const CreditSubscriptionModal = ({ summaries, helpers, refreshStatus, onClose, o
 };
 
 const SupportModal = ({ supportContact, onClose }) => {
-    const handleOpenSupportWebsite = () => {
-        if (typeof window !== "undefined" && typeof window.open === "function") {
-            window.open(SUPPORT_WEBSITE_URL, "_blank", "noopener,noreferrer");
+    const [openWebsiteError, setOpenWebsiteError] = useState("");
+
+    const handleOpenSupportWebsite = async () => {
+        setOpenWebsiteError("");
+
+        try {
+            const uxpModule = require("uxp");
+            const openExternal = uxpModule && uxpModule.shell && uxpModule.shell.openExternal;
+
+            if (typeof openExternal !== "function") {
+                throw new Error("UXP shell chưa sẵn sàng để mở liên kết ngoài.");
+            }
+
+            await openExternal(SUPPORT_WEBSITE_URL);
+        } catch (error) {
+            setOpenWebsiteError(error && error.message ? error.message : "Không thể mở website hỗ trợ từ plugin.");
         }
     };
 
@@ -1727,6 +1740,7 @@ const SupportModal = ({ supportContact, onClose }) => {
             canClose={true}
         >
             <div className="modal-stack">
+                {openWebsiteError ? <InlineError message={openWebsiteError} /> : null}
                 <div className="account-detail-card">
                     <span className="summary-label">Website hỗ trợ</span>
                     <strong>{SUPPORT_WEBSITE_URL}</strong>
