@@ -44,7 +44,7 @@ export const Header = ({ userSummary, planSummary, creditSummary, refreshStatus,
 
     return (
         <div className="header-container">
-                <img className="brand-banner-image" src={"/meko-header-logo.png"} alt="Meko Banana Pro" />
+                <img className="brand-banner-image" src={"/icons/meko-header-logo.png"} alt="Meko Banana Pro" />
             
                 <div className="header-controls">
                     <button

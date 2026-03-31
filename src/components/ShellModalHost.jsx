@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { formatPriceVnd, getPurchasePackagePrimaryValue } from "../lib/purchase.js";
 
 const SUPPORT_WEBSITE_URL = "https://www.mekomedia.vn/p/meko-banana-pro.html";
-const SUPPORT_ZALO_QR_SRC = "QR-zalo.jpg";
+const SUPPORT_ZALO_QR_SRC = "/icons/QR-zalo.jpg";
 
 const CloseButton = ({ onClick, title = "Đóng" }) => (
     <button type="button" className="btn modal-close" onClick={onClick} title={title}>
@@ -2550,7 +2550,7 @@ const AccountModal = ({ userProfile, summaries, authActions, helpers, onClose, o
     return (
         <ModalFrame
             title="Tài khoản"
-            subtitle="Xem trạng thái email, chỉnh thông tin cơ bản và quản lý phiên đăng nhập hiện tại."
+            subtitle=""
             onClose={onClose}
             canClose={true}
         >
