@@ -122,6 +122,8 @@ const resolveHistoryNamespace = (profile) => {
     return profile.id || profile.email || "authenticated-user";
 };
 
+const isAccountInactive = (profile) => Boolean(profile && profile.status === "inactive");
+
 export const App = () => {
     const [bootStatus, setBootStatus] = useState("idle");
     const [authStatus, setAuthStatus] = useState("unknown");
@@ -229,6 +231,13 @@ export const App = () => {
         setActiveModal("support");
     }, []);
 
+    const syncAccountAccessGate = useCallback((profile) => {
+        const lockedByInactiveAccount = isAccountInactive(profile);
+        setActiveAuxScreen(null);
+        setActiveModal(lockedByInactiveAccount ? "support" : null);
+        return lockedByInactiveAccount;
+    }, []);
+
     const loadEntitlementData = useCallback(async (sessionValue, options) => {
         const config = options || {};
 
@@ -311,7 +320,7 @@ export const App = () => {
 
             try {
                 const result = await loadShellData(persistedSession);
-                setActiveModal(null);
+                syncAccountAccessGate(result.profile);
                 if (result.entitlementError) {
                     showToast("Đã đăng nhập nhưng chưa thể đồng bộ entitlement mới nhất.", "warning");
                 }
@@ -331,7 +340,7 @@ export const App = () => {
             });
             setBootStatus("ready");
         }
-    }, [applyUnauthenticatedShell, handleSessionChange, loadShellData, openAuthModal, showToast]);
+    }, [applyUnauthenticatedShell, handleSessionChange, loadShellData, openAuthModal, showToast, syncAccountAccessGate]);
 
     useEffect(() => {
         bootstrapShell();
@@ -412,6 +421,7 @@ export const App = () => {
                 preserveEntitlement: true
             });
             const historyResult = await refreshHistory(result.profile);
+            const lockedByInactiveAccount = syncAccountAccessGate(result.profile);
 
             setTabRefreshVersion((value) => value + 1);
 
@@ -420,6 +430,9 @@ export const App = () => {
                 showToast("Không thể cập nhật đầy đủ dữ liệu mới nhất.", "warning", {
                     detail: "Đã refresh session, user và shell summary, nhưng vẫn còn ít nhất một nguồn dữ liệu giữ trạng thái cũ."
                 });
+            } else if (lockedByInactiveAccount) {
+                setRefreshStatus("success");
+                showToast("Tài khoản vẫn đang chờ admin kích hoạt. Hãy liên hệ admin rồi bấm Refresh lại.", "warning");
             } else {
                 setRefreshStatus("success");
                 showToast("Đã đồng bộ lại dữ liệu plugin.", "success", {
@@ -447,21 +460,31 @@ export const App = () => {
         setTimeout(() => {
             setRefreshStatus("idle");
         }, 1200);
-    }, [applyUnauthenticatedShell, loadShellData, openAuthModal, refreshHistory, refreshStatus, session, showToast]);
+    }, [applyUnauthenticatedShell, loadShellData, openAuthModal, refreshHistory, refreshStatus, session, showToast, syncAccountAccessGate]);
 
     const closeModal = useCallback(() => {
+        if (activeModal === "support" && isAccountInactive(userProfile)) {
+            return;
+        }
+
         const shouldRefreshAfterPurchase = activeModal === "purchase" && authStatus === "authenticated";
         setActiveModal(null);
 
         if (shouldRefreshAfterPurchase) {
             refreshShell();
         }
-    }, [activeModal, authStatus, refreshShell]);
+    }, [activeModal, authStatus, refreshShell, userProfile]);
 
     const handleBlockedInteraction = useCallback(() => {
+        if (authStatus === "authenticated" && isAccountInactive(userProfile)) {
+            showToast("Tài khoản của bạn chưa được admin kích hoạt. Vui lòng liên hệ admin rồi bấm Refresh để kiểm tra lại.", "warning");
+            openSupportModal();
+            return;
+        }
+
         showToast("Vui lòng đăng nhập để thực hiện thao tác này.", "warning");
         openAuthModal("login");
-    }, [openAuthModal, showToast]);
+    }, [authStatus, openAuthModal, openSupportModal, showToast, userProfile]);
 
     const handleEntitlementDenied = useCallback((currentEntitlement) => {
         const message = getGenerateDenyMessage(currentEntitlement);
@@ -478,13 +501,13 @@ export const App = () => {
     }, [openCreditSubscription, openSupportModal, showToast]);
 
     const handleTabChange = useCallback((nextTab) => {
-        if (authStatus !== "authenticated") {
+        if (authStatus !== "authenticated" || isAccountInactive(userProfile)) {
             handleBlockedInteraction();
             return;
         }
 
         setActiveTab(nextTab);
-    }, [authStatus, handleBlockedInteraction]);
+    }, [authStatus, handleBlockedInteraction, userProfile]);
 
     const handleRecordHistory = useCallback(async (draft) => {
         if (!historyNamespace) {
@@ -642,6 +665,11 @@ export const App = () => {
                 return;
             }
 
+            if (isAccountInactive(userProfile)) {
+                handleBlockedInteraction();
+                return;
+            }
+
             setActiveAuxScreen(null);
             setActiveModal("account");
             return;
@@ -650,6 +678,11 @@ export const App = () => {
         if (action === "history") {
             if (authStatus !== "authenticated") {
                 openAuthModal("login");
+                return;
+            }
+
+            if (isAccountInactive(userProfile)) {
+                handleBlockedInteraction();
                 return;
             }
 
@@ -665,6 +698,11 @@ export const App = () => {
                 return;
             }
 
+            if (isAccountInactive(userProfile)) {
+                handleBlockedInteraction();
+                return;
+            }
+
             setActiveAuxScreen(null);
             setActiveModal("purchase");
             return;
@@ -673,6 +711,11 @@ export const App = () => {
         if (action === "credit-subscription") {
             if (authStatus !== "authenticated") {
                 openAuthModal("login");
+                return;
+            }
+
+            if (isAccountInactive(userProfile)) {
+                handleBlockedInteraction();
                 return;
             }
 
@@ -701,6 +744,11 @@ export const App = () => {
                 return;
             }
 
+            if (isAccountInactive(userProfile)) {
+                handleBlockedInteraction();
+                return;
+            }
+
             setActiveModal(null);
             setActiveAuxScreen("settings");
             return;
@@ -714,7 +762,7 @@ export const App = () => {
 
             performLogout();
         }
-    }, [authStatus, openAuthModal, openCreditSubscription, openSupportModal, performLogout, refreshStatus]);
+    }, [authStatus, handleBlockedInteraction, openAuthModal, openCreditSubscription, openSupportModal, performLogout, refreshStatus, showToast, userProfile]);
 
     const handleCopySupportContact = useCallback(async (contactValue) => {
         const value = contactValue || PLUGIN_SUPPORT_CONTACT;
@@ -748,13 +796,20 @@ export const App = () => {
 
         handleSessionChange(nextSession);
         const result = await loadShellData(nextSession);
-        setActiveModal(null);
-        showToast("Đăng nhập thành công.", "success");
+        const lockedByInactiveAccount = syncAccountAccessGate(result.profile);
+
+        if (lockedByInactiveAccount) {
+            showToast("Tài khoản của bạn đang chờ admin kích hoạt. Vui lòng liên hệ admin và bấm Refresh để kiểm tra lại.", "warning");
+        } else {
+            setActiveModal(null);
+            showToast("Đăng nhập thành công.", "success");
+        }
+
         if (result.entitlementError) {
             showToast("Đã đăng nhập nhưng chưa thể cập nhật entitlement mới nhất.", "warning");
         }
         return data.user;
-    }, [handleSessionChange, loadShellData, session, showToast]);
+    }, [handleSessionChange, loadShellData, session, showToast, syncAccountAccessGate]);
 
     const submitRegister = useCallback(async ({ email, password }) => {
         const data = await requestJson("/auth/register", {
@@ -1037,9 +1092,7 @@ export const App = () => {
             path: "/images/phuc-che-anh/generate",
             body: payload
         })
-    ), [submitGenerateRequest]);
-
-    const submitPromptOptimize = useCallback(async (payload) => {
+    ), [submitGenerateRequest]);    const submitPromptOptimize = useCallback(async (payload) => {
         if (!session) {
             openAuthModal("login");
             return { ok: false };
@@ -1059,13 +1112,13 @@ export const App = () => {
             if (error && error.status === 401) {
                 applyUnauthenticatedShell();
                 openAuthModal("login", {
-                    notice: "PhiÃªn Ä‘Äƒng nháº­p Ä‘Ã£ háº¿t háº¡n. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i."
+                    notice: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
                 });
-                showToast("PhiÃªn Ä‘Äƒng nháº­p Ä‘Ã£ háº¿t háº¡n.", "error");
+                showToast("Phiên đăng nhập đã hết hạn.", "error");
                 return { ok: false };
             }
 
-            showToast(error && error.message ? error.message : "KhÃ´ng thá»ƒ tá»‘i Æ°u prompt AI.", "error");
+            showToast(error && error.message ? error.message : "Không thể tối ưu prompt AI.", "error");
             return { ok: false, error };
         }
     }, [
@@ -1078,7 +1131,8 @@ export const App = () => {
 
     const pluginVersion = getPluginVersion();
     const environmentSummary = getPluginEnvironmentSummary();
-    const shellLocked = authStatus !== "authenticated";
+    const accountInactive = isAccountInactive(userProfile);
+    const shellLocked = authStatus !== "authenticated" || accountInactive;
     const pluginBusy = refreshStatus === "refreshing";
     const entitlementUi = getEntitlementUiState(entitlement);
     const supportContactValue = entitlementUi.supportContact || PLUGIN_SUPPORT_CONTACT || "";
@@ -1311,12 +1365,18 @@ export const App = () => {
                     {shellLocked ? (
                         <div className="shell-lock-banner">
                             <div>
-                                <strong>Plugin đang ở chế độ chưa đăng nhập.</strong>
-                                <span>Bạn vẫn có thể xem shell, nhưng chuyển tab và mọi thao tác có side effect đều đang bị khóa.</span>
+                                <strong>{accountInactive ? "Tài khoản đang chờ admin kích hoạt." : "Plugin đang ở chế độ chưa đăng nhập."}</strong>
+                                <span>{accountInactive ? "Sau khi admin active trên web-admin, hãy bấm Refresh trong modal support để mở khóa plugin." : "Bạn vẫn có thể xem shell, nhưng chuyển tab và mọi thao tác có side effect đều đang bị khóa."}</span>
                             </div>
-                            <button className="btn primary" onClick={() => openAuthModal("login")}>
-                                Đăng nhập
-                            </button>
+                            {accountInactive ? (
+                                <button className="btn primary" onClick={refreshShell}>
+                                    Kiểm tra lại
+                                </button>
+                            ) : (
+                                <button className="btn primary" onClick={() => openAuthModal("login")}>
+                                    Đăng nhập
+                                </button>
+                            )}
                         </div>
                     ) : null}
 
@@ -1362,6 +1422,7 @@ export const App = () => {
                 onSyncShell={refreshShell}
                 onConfirmRefresh={refreshShell}
                 onLogout={performLogout}
+                isAccountInactive={accountInactive}
                 authActions={{
                     login: submitLogin,
                     register: submitRegister,

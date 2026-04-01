@@ -1712,7 +1712,7 @@ const CreditSubscriptionModal = ({ summaries, helpers, refreshStatus, onClose, o
     );
 };
 
-const SupportModal = ({ supportContact, onClose }) => {
+const SupportModal = ({ supportContact, onClose, onRefresh, refreshStatus, locked }) => {
     const [openWebsiteError, setOpenWebsiteError] = useState("");
 
     const handleOpenSupportWebsite = async () => {
@@ -1734,13 +1734,20 @@ const SupportModal = ({ supportContact, onClose }) => {
 
     return (
         <ModalFrame
-            title="Liên hệ hỗ trợ"
-            subtitle="Bạn có thể vào website hỗ trợ hoặc quét QR Zalo để liên hệ nhanh với đội vận hành."
+            title={locked ? "Tài khoản chưa được kích hoạt" : "Liên hệ hỗ trợ"}
+            subtitle={locked
+                ? "Tài khoản của bạn đang chờ admin active trên web-admin. Vui lòng liên hệ admin/support, sau đó bấm Refresh để kiểm tra lại trạng thái."
+                : "Bạn có thể vào website hỗ trợ hoặc quét QR Zalo để liên hệ nhanh với đội vận hành."}
             onClose={onClose}
-            canClose={true}
+            canClose={!locked}
         >
             <div className="modal-stack">
                 {openWebsiteError ? <InlineError message={openWebsiteError} /> : null}
+                {locked ? (
+                    <div className="form-error">
+                        Tài khoản của bạn hiện chưa được kích hoạt nên plugin vẫn bị khóa. Hãy liên hệ admin hoặc support để được active thủ công.
+                    </div>
+                ) : null}
                 <div className="account-detail-card">
                     <span className="summary-label">Website hỗ trợ</span>
                     <strong>{SUPPORT_WEBSITE_URL}</strong>
@@ -1758,10 +1765,23 @@ const SupportModal = ({ supportContact, onClose }) => {
                     <span>Quét mã để vào Zalo hỗ trợ và trao đổi trực tiếp với đội ngũ.</span>
                 </div>
 
+                {supportContact ? (
+                    <div className="account-detail-card">
+                        <span className="summary-label">Support contact</span>
+                        <strong>{supportContact}</strong>
+                        <span>Dùng thông tin này khi cần gửi mã user hoặc email đăng ký để admin kiểm tra nhanh.</span>
+                    </div>
+                ) : null}
+
                 <div className="modal-actions">
-                    <button className="btn" onClick={onClose}>
-                        Đóng
+                    <button className="btn primary" onClick={onRefresh} disabled={refreshStatus === "refreshing"}>
+                        {refreshStatus === "refreshing" ? "Đang kiểm tra..." : "Refresh"}
                     </button>
+                    {!locked ? (
+                        <button className="btn" onClick={onClose}>
+                            Đóng
+                        </button>
+                    ) : null}
                 </div>
             </div>
         </ModalFrame>
@@ -2582,7 +2602,8 @@ export const ShellModalHost = ({
     onOpenSupport,
     onSyncShell,
     onConfirmRefresh,
-    onLogout
+    onLogout,
+    isAccountInactive
 }) => {
     if (!activeModal) {
         return null;
@@ -2656,7 +2677,15 @@ export const ShellModalHost = ({
     }
 
     if (activeModal === "support") {
-        return <SupportModal supportContact={summaries.entitlementUi && summaries.entitlementUi.supportContact} onClose={onClose} />;
+        return (
+            <SupportModal
+                supportContact={summaries.entitlementUi && summaries.entitlementUi.supportContact}
+                onClose={onClose}
+                onRefresh={onConfirmRefresh}
+                refreshStatus={refreshStatus}
+                locked={Boolean(isAccountInactive)}
+            />
+        );
     }
 
     if (activeModal === "refresh-confirm") {
