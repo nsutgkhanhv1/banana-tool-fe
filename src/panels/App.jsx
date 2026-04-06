@@ -5,6 +5,7 @@ import { ShellModalHost } from "../components/ShellModalHost.jsx";
 import { ShellSettingsView } from "../components/ShellSettingsView.jsx";
 import { requestJson } from "../lib/api.js";
 import { formatEntitlementDate, getEntitlementUiState, getGenerateDenyMessage } from "../lib/entitlement.js";
+import { getGenerationCreditCost } from "../lib/generation-cost.js";
 import {
     getPluginEnvironmentSummary,
     getPluginVersion,
@@ -1005,6 +1006,23 @@ export const App = () => {
 
         if (!currentEntitlement.canGenerate) {
             handleEntitlementDenied(currentEntitlement);
+            return { ok: false };
+        }
+
+        const requestedSize = typeof body === "object" && body && typeof body.size === "string"
+            ? body.size
+            : typeof body === "object" && body && body.options && typeof body.options.size === "string"
+                ? body.options.size
+                : "";
+        const requiredCredits = getGenerationCreditCost(requestedSize);
+
+        if (currentEntitlement.creditRemaining < requiredCredits) {
+            const sizeLabel = requestedSize || "Kích thước đã chọn";
+            showToast(
+                `${sizeLabel} cần ${requiredCredits} credit, nhưng tài khoản hiện chỉ còn ${currentEntitlement.creditRemaining} credit.`,
+                "warning"
+            );
+            openCreditSubscription();
             return { ok: false };
         }
 

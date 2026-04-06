@@ -6,6 +6,7 @@ import {
     createResultImageRecord,
     performResultInsert
 } from '../../lib/result-insert.js';
+import { getGenerationCreditWarning } from '../../lib/generation-cost.js';
 import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
 
 const TOOL_KEY = 'phucche';
@@ -158,6 +159,7 @@ export const PhucCheTab = ({
         : result
             ? result.previewUrl
             : '';
+    const sizeCreditWarning = useMemo(() => getGenerationCreditWarning(size, '2K và Giữ nguyên'), [size]);
 
     useEffect(() => {
         const handlePaste = async (event) => {
@@ -619,6 +621,7 @@ export const PhucCheTab = ({
                         <option value="2K">2K (2048px)</option>
                         <option value="original">Giữ nguyên</option>
                     </select>
+                    <div className="form-hint">{sizeCreditWarning}</div>
                 </div>
             </div>
 

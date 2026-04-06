@@ -6,6 +6,7 @@ import {
     createResultImageRecord,
     performResultInsert
 } from '../../lib/result-insert.js';
+import { getGenerationCreditWarning } from '../../lib/generation-cost.js';
 import { RestorationMaskEditor } from '../../components/RestorationMaskEditor.jsx';
 import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
 
@@ -402,6 +403,7 @@ export const ThayNenTab = ({
             }).filter(Boolean),
         [promptEnhancers]
     );
+    const sizeCreditWarning = useMemo(() => getGenerationCreditWarning(size, '1K và 2K'), [size]);
 
     useEffect(() => {
         const handlePaste = async (event) => {
@@ -879,6 +881,7 @@ export const ThayNenTab = ({
                             <option value="2K">2K (2048px)</option>
                             <option value="1K">1K (1024px)</option>
                         </select>
+                        <div className="form-hint">{sizeCreditWarning}</div>
                     </div>
                 </div>
             </div>
