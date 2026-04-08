@@ -24,6 +24,18 @@ export const ApiError = class extends Error {
     }
 };
 
+const getFriendlyApiErrorMessage = (response, body) => {
+    if (response && (response.status === 503 || response.status === 524)) {
+        return "Hiện đang có quá nhiều người dùng dẫn đến quá tải. Vui lòng thử lại sau.";
+    }
+
+    if (body && body.error) {
+        return body.error;
+    }
+
+    return `Request failed (${response.status})`;
+};
+
 export const requestJson = async (path, init = {}, session, onSessionRefresh, options = {}) => {
     const config = options || {};
     const makeRequest = async (token) => fetch(`${API_BASE_URL}${path}`, {
@@ -76,7 +88,7 @@ export const requestJson = async (path, init = {}, session, onSessionRefresh, op
     const body = await parseJson(response);
 
     if (!response.ok || !body.success) {
-        throw new ApiError(body.error || `Request failed (${response.status})`, body.code, response.status);
+        throw new ApiError(getFriendlyApiErrorMessage(response, body), body.code, response.status);
     }
 
     return body.data;

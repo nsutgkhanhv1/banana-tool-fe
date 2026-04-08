@@ -11,7 +11,8 @@ import { RestorationMaskEditor } from '../../components/RestorationMaskEditor.js
 import { QUICK_LAYER_MODES, useReferenceImages } from '../../lib/reference-images.js';
 
 const TOOL_KEY = 'thaynen';
-const MAX_REFERENCE_IMAGES = 1;
+const MAX_REFERENCE_IMAGES = 3;
+const MAIN_SUBJECT_IMAGE_INDEX = 0;
 const BACKGROUND_PRESETS = [
     { id: 'studio', label: 'Studio' },
     { id: 'outdoor', label: 'Outdoor' },
@@ -360,7 +361,6 @@ export const ThayNenTab = ({
     }, [savedPrompts]);
     const {
         items,
-        activeImageId,
         canAddMore,
         restoreStatus,
         restoreNotice,
@@ -368,7 +368,6 @@ export const ThayNenTab = ({
         addFromClipboard,
         addFromQuickLayer,
         removeImage,
-        selectActiveImage,
         touchAllImages,
         restoreFromSnapshots
     } = useReferenceImages({
@@ -376,8 +375,9 @@ export const ThayNenTab = ({
         maxItems: MAX_REFERENCE_IMAGES
     });
 
-    const activeImage = useMemo(() => items.find((image) => image.id === activeImageId) || null, [activeImageId, items]);
-    const canSubmit = Boolean(activeImage);
+    const primaryImage = useMemo(() => items[MAIN_SUBJECT_IMAGE_INDEX] || null, [items]);
+    const supportingReferenceImages = useMemo(() => items.slice(MAIN_SUBJECT_IMAGE_INDEX + 1), [items]);
+    const canSubmit = Boolean(primaryImage);
     const promptEnhancerFragments = useMemo(
         () => buildPromptEnhancerFragments({ allowFreeZoom, promptEnhancers }),
         [allowFreeZoom, promptEnhancers]
@@ -475,7 +475,7 @@ export const ThayNenTab = ({
 
             const restored = await restoreFromSnapshots({
                 snapshots: payload.referenceImages || [],
-                nextActiveImageId: payload.activeImageId || null
+                nextActiveImageId: payload.referenceImages?.[0]?.id || payload.activeImageId || null
             });
 
             if (!cancelled && payload.referenceImages && payload.referenceImages.length > 0 && !restored.items.length) {
@@ -491,7 +491,7 @@ export const ThayNenTab = ({
     }, [historyRestoreRequest, restoreFromSnapshots]);
 
     const createGeneratePayload = () => {
-        if (!activeImage) {
+        if (!primaryImage) {
             throw new Error('Cần ít nhất 1 ảnh đầu vào để chạy Thay Nền.');
         }
 
@@ -499,11 +499,17 @@ export const ThayNenTab = ({
 
         return {
             sourceImage: {
-                imageBase64: activeImage.imageBase64,
-                source: mapSourceTypeToApiSource(activeImage.sourceType),
-                name: activeImage.displayName,
-                mimeType: activeImage.mimeType
+                imageBase64: primaryImage.imageBase64,
+                source: mapSourceTypeToApiSource(primaryImage.sourceType),
+                name: primaryImage.displayName,
+                mimeType: primaryImage.mimeType
             },
+            referenceImages: supportingReferenceImages.map((image) => ({
+                imageBase64: image.imageBase64,
+                source: mapSourceTypeToApiSource(image.sourceType),
+                name: image.displayName,
+                mimeType: image.mimeType
+            })),
             ratio: aspectRatio,
             size,
             preset: backgroundPreset || undefined,
@@ -621,7 +627,7 @@ export const ThayNenTab = ({
                         keepSubject: payload.keepSubject,
                         matchLighting: payload.matchLighting,
                         replacementStrength: payload.replacementStrength,
-                        activeImageId,
+                        activeImageId: items[0]?.id || null,
                         referenceImages: items.map((image) => ({
                             id: image.id,
                             sourceType: image.sourceType,
@@ -901,13 +907,15 @@ export const ThayNenTab = ({
                     </div>
                 ) : (
                     <div className="reference-grid">
-                        {items.map((image) => (
+                        {items.map((image, index) => (
                             <div
                                 key={image.id}
-                                className={`ref-image ${activeImageId === image.id ? 'active' : ''}`}
-                                title={image.displayName}
-                                onClick={() => selectActiveImage(image.id)}
+                                className={`ref-image ${index === MAIN_SUBJECT_IMAGE_INDEX ? 'active' : ''}`}
+                                title={`${index === MAIN_SUBJECT_IMAGE_INDEX ? 'Main subject' : 'Ảnh tham chiếu'}: ${image.displayName}`}
                             >
+                                <div className={`ref-role-badge ${index === MAIN_SUBJECT_IMAGE_INDEX ? 'is-primary' : ''}`}>
+                                    {index === MAIN_SUBJECT_IMAGE_INDEX ? 'Ảnh 1 · Main' : `Ảnh ${index + 1} · Ref`}
+                                </div>
                                 <div className="ref-delete" onClick={(event) => handleRemoveImage(image.id, event)}>
                                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                 </div>
@@ -926,6 +934,7 @@ export const ThayNenTab = ({
                     <div className="reference-note">{restoreNotice}</div>
                 ) : null}
 
+                <div className="reference-note">Ảnh 1 luôn là main subject. Ảnh 2-3 là ảnh tham chiếu cho nền, ánh sáng và chất liệu; hệ thống đọc theo đúng thứ tự thêm ảnh.</div>
                 <div className="reference-note">Dán ảnh từ clipboard bằng `Cmd/Ctrl + V` khi tab đang focus.</div>
             </div>
 
@@ -1139,13 +1148,13 @@ export const ThayNenTab = ({
                             className="btn"
                             type="button"
                             onClick={() => setShowMaskEditor((current) => !current)}
-                            disabled={!activeImage}
+                            disabled={!primaryImage}
                         >
                             {showMaskEditor ? 'Ẩn editor' : 'Mở editor'}
                         </button>
                     </div>
 
-                    {activeImage ? (
+                    {primaryImage ? (
                         <>
                             <div className="face-region-summary">
                                 <span>{repairMask ? 'Đã có mask chỉnh tay cho ảnh hiện tại.' : 'Chưa có mask chỉnh tay nào.'}</span>
@@ -1154,7 +1163,7 @@ export const ThayNenTab = ({
 
                             {showMaskEditor ? (
                                 <RestorationMaskEditor
-                                    previewUrl={activeImage.previewUrl}
+                                    previewUrl={primaryImage.previewUrl}
                                     initialMask={repairMask}
                                     onChange={setRepairMask}
                                     disabled={actionsDisabled}
