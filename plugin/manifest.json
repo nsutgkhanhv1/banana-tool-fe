@@ -72,9 +72,9 @@
       },
       "icons": [
         {
-          "width": 32,
-          "height": 32,
-          "path": "icons/icon_D.png",
+          "width": 23,
+          "height": 23,
+          "path": "icons/icon-panel.png",
           "scale": [
             1,
             2
@@ -84,13 +84,13 @@
             "darkest"
           ],
           "species": [
-            "generic"
+            "toolbar"
           ]
         },
         {
-          "width": 32,
-          "height": 32,
-          "path": "icons/icon_N.png",
+          "width": 23,
+          "height": 23,
+          "path": "icons/icon-panel.png",
           "scale": [
             1,
             2
@@ -100,7 +100,7 @@
             "light"
           ],
           "species": [
-            "generic"
+            "toolbar"
           ]
         }
       ]
@@ -108,9 +108,9 @@
   ],
   "icons": [
     {
-      "width": 32,
-      "height": 32,
-      "path": "icons/icon_D.png",
+      "width": 24,
+      "height": 24,
+      "path": "icons/icon-panel.png",
       "scale": [
         1,
         2
@@ -120,13 +120,13 @@
         "darkest"
       ],
       "species": [
-        "generic"
+        "pluginList"
       ]
     },
     {
-      "width": 32,
-      "height": 32,
-      "path": "icons/icon_N.png",
+      "width": 24,
+      "height": 24,
+      "path": "icons/icon-panel.png",
       "scale": [
         1,
         2
@@ -136,7 +136,7 @@
         "light"
       ],
       "species": [
-        "generic"
+        "pluginList"
       ]
     }
   ]
