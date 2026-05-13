@@ -367,6 +367,12 @@ export const useReferenceImages = ({ toolKey, maxItems, maxFileSizeBytes = DEFAU
         });
     }, []);
 
+    const clearImages = useCallback(() => {
+        setItems([]);
+        setActiveImageId(null);
+        setRestoreNotice("");
+    }, []);
+
     const selectActiveImage = useCallback((imageId) => {
         setActiveImageId(imageId);
     }, []);
@@ -420,6 +426,7 @@ export const useReferenceImages = ({ toolKey, maxItems, maxFileSizeBytes = DEFAU
         addFromClipboard,
         addFromQuickLayer,
         removeImage,
+        clearImages,
         selectActiveImage,
         touchAllImages,
         restoreFromSnapshots

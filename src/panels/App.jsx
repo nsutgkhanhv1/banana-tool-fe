@@ -15,6 +15,7 @@ import {
 } from "../lib/plugin-config.js";
 import { persistPluginSettings, readPluginSettings } from "../lib/plugin-settings.js";
 import { createPurchaseGateway } from "../lib/purchase.js";
+import { readPersistentValue, removePersistentValue, writePersistentValue } from "../lib/uxp-persistent-store.js";
 import {
     captureInsertContextSafely,
     createResultImageRecord,
@@ -28,6 +29,7 @@ import { TuDoAITab } from "./tabs/TuDoAITab.jsx";
 const DEFAULT_TAB = "thaynen";
 const TAB_STORAGE_KEY = "banana-tool.shell.active-tab";
 const SESSION_STORAGE_KEY = "banana-tool.account.session.v1";
+const PANEL_SHOW_EVENT = "banana-tool:panel-show";
 
 const TABS = [
     { id: "thaynen", label: "Thay Nền", component: ThayNenTab },
@@ -47,31 +49,33 @@ const getStorage = () => {
     return window.localStorage;
 };
 
-const readPersistedTab = () => {
+const readPersistedTab = async () => {
     const storage = getStorage();
     const persisted = storage ? storage.getItem(TAB_STORAGE_KEY) : null;
-    const validTab = TABS.some((tab) => tab.id === persisted);
-    return validTab ? persisted : DEFAULT_TAB;
+    const persistentValue = persisted || await readPersistentValue(TAB_STORAGE_KEY);
+    const validTab = TABS.some((tab) => tab.id === persistentValue);
+    return validTab ? persistentValue : DEFAULT_TAB;
 };
 
-const readPersistedSession = () => {
-    const storage = getStorage();
-    if (!storage) {
-        return null;
-    }
-
-    const raw = storage.getItem(SESSION_STORAGE_KEY);
+const parsePersistedSession = (raw) => {
     if (!raw) {
         return null;
     }
 
-    try {
-        const parsed = JSON.parse(raw);
-        if (!parsed.accessToken || !parsed.refreshToken) {
-            return null;
-        }
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!parsed || !parsed.accessToken || !parsed.refreshToken) {
+        return null;
+    }
 
-        return parsed;
+    return parsed;
+};
+
+const readPersistedSession = async () => {
+    const storage = getStorage();
+    const raw = storage ? storage.getItem(SESSION_STORAGE_KEY) : null;
+
+    try {
+        return parsePersistedSession(raw) || parsePersistedSession(await readPersistentValue(SESSION_STORAGE_KEY));
     } catch (error) {
         return null;
     }
@@ -79,25 +83,28 @@ const readPersistedSession = () => {
 
 const persistTab = (value) => {
     const storage = getStorage();
-    if (!storage) {
-        return;
+    if (storage) {
+        storage.setItem(TAB_STORAGE_KEY, value);
     }
 
-    storage.setItem(TAB_STORAGE_KEY, value);
+    writePersistentValue(TAB_STORAGE_KEY, value).catch(() => {});
 };
 
 const persistSession = (session) => {
     const storage = getStorage();
-    if (!storage) {
-        return;
-    }
 
     if (!session) {
-        storage.removeItem(SESSION_STORAGE_KEY);
+        if (storage) {
+            storage.removeItem(SESSION_STORAGE_KEY);
+        }
+        removePersistentValue(SESSION_STORAGE_KEY).catch(() => {});
         return;
     }
 
-    storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    if (storage) {
+        storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    }
+    writePersistentValue(SESSION_STORAGE_KEY, session).catch(() => {});
 };
 
 const formatRelativeDate = (timestamp) => {
@@ -143,6 +150,7 @@ export const App = () => {
     const [historyStatus, setHistoryStatus] = useState("idle");
     const [historyError, setHistoryError] = useState("");
     const [historyRestoreRequest, setHistoryRestoreRequest] = useState(null);
+    const [adminPromptPresets, setAdminPromptPresets] = useState([]);
     const [pluginSettings, setPluginSettings] = useState(() => readPluginSettings());
     const [authModalConfig, setAuthModalConfig] = useState({
         resetKey: 0,
@@ -208,6 +216,7 @@ export const App = () => {
         setAuthStatus("unauthenticated");
         setUserProfile(null);
         setEntitlement(null);
+        setAdminPromptPresets([]);
         setEntitlementSyncError("");
     }, [handleSessionChange]);
 
@@ -295,6 +304,21 @@ export const App = () => {
             disableSessionRefresh: Boolean(config.disableSessionRefresh)
         });
 
+        try {
+            const presets = await requestJson(
+                "/images/prompt-presets",
+                { method: "GET" },
+                sessionValue,
+                handleSessionChange,
+                {
+                    disableSessionRefresh: Boolean(config.disableSessionRefresh)
+                }
+            );
+            setAdminPromptPresets(Array.isArray(presets) ? presets : []);
+        } catch (error) {
+            setAdminPromptPresets([]);
+        }
+
         return {
             profile,
             entitlement: entitlementResult.entitlement,
@@ -307,9 +331,9 @@ export const App = () => {
 
         try {
             await wait(350);
-            setActiveTab(readPersistedTab());
+            setActiveTab(await readPersistedTab());
 
-            const persistedSession = readPersistedSession();
+            const persistedSession = await readPersistedSession();
             if (!persistedSession) {
                 applyUnauthenticatedShell();
                 openAuthModal("login");
@@ -346,6 +370,19 @@ export const App = () => {
     useEffect(() => {
         bootstrapShell();
     }, [bootstrapShell]);
+
+    useEffect(() => {
+        const handlePanelShow = () => {
+            if (bootStatus === "loading") {
+                return;
+            }
+
+            bootstrapShell();
+        };
+
+        window.addEventListener(PANEL_SHOW_EVENT, handlePanelShow);
+        return () => window.removeEventListener(PANEL_SHOW_EVENT, handlePanelShow);
+    }, [bootStatus, bootstrapShell]);
 
     useEffect(() => {
         setMountedTabs((current) => (
@@ -1306,6 +1343,7 @@ export const App = () => {
                         onRequireAuth={tabProps.onRequireAuth}
                         onRecordHistory={tabProps.onRecordHistory}
                         historyRestoreRequest={tabProps.historyRestoreRequest}
+                        adminPromptPresets={adminPromptPresets}
                         onOptimizePrompt={submitPromptOptimize}
                         onGenerate={
                             tab.id === "tudoai"
@@ -1324,6 +1362,7 @@ export const App = () => {
         activeTab,
         mountedTabs,
         submitPromptOptimize,
+        adminPromptPresets,
         submitPhucCheAnhGenerate,
         submitThayNenGenerate,
         submitTuDoAIGenerate,

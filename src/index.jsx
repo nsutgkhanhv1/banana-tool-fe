@@ -9,7 +9,7 @@ import { entrypoints, shell } from "uxp";
 const ABOUT_WEBSITE_URL = "https://www.mekomedia.vn/p/meko-banana-pro.html";
 
 const appController = new PanelController(() => <App/>, { id: "demos", menuItems: [
-    { id: "reload1", label: "Reload Plugin", enabled: true, checked: false, oninvoke: () => location.reload() }
+    { id: "reload1", label: "Reload Panel", enabled: true, checked: false, oninvoke: () => appController.reload() }
 ] });
 
 const openAboutWebsite = async () => {

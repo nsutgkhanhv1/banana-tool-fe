@@ -248,7 +248,8 @@ export const TuDoAITab = ({
     onGenerate,
     onOptimizePrompt,
     onRecordHistory,
-    historyRestoreRequest
+    historyRestoreRequest,
+    adminPromptPresets
 }) => {
     const rootRef = useRef(null);
     const handledRestoreIdRef = useRef(null);
@@ -289,6 +290,7 @@ export const TuDoAITab = ({
         addFromClipboard,
         addFromQuickLayer,
         removeImage,
+        clearImages,
         selectActiveImage,
         touchAllImages,
         restoreFromSnapshots
@@ -315,6 +317,17 @@ export const TuDoAITab = ({
         [functionCategoryId]
     );
     const sizeCreditWarning = useMemo(() => getGenerationCreditWarning(size, '1K và 2K'), [size]);
+    const adminPromptOptions = useMemo(() => (
+        Array.isArray(adminPromptPresets)
+            ? adminPromptPresets
+                .filter((item) => item && item.feature === 'tu-do-ai' && item.prompt)
+                .map((item) => ({
+                    id: item.id,
+                    title: item.title || 'Admin preset',
+                    prompt: String(item.prompt || '').slice(0, 1000)
+                }))
+            : []
+    ), [adminPromptPresets]);
 
     useEffect(() => {
         const handlePaste = async (event) => {
@@ -456,7 +469,17 @@ export const TuDoAITab = ({
         if (memoName === name) setMemoName('');
     };
 
-    const handleLoadSavedPrompt = (name) => {
+    const handleLoadSavedPrompt = (value) => {
+        if (value && value.startsWith('admin:')) {
+            const selectedAdmin = adminPromptOptions.find((p) => p.id === value.slice('admin:'.length));
+            if (selectedAdmin) {
+                setPrompt(selectedAdmin.prompt);
+                setMemoName('');
+            }
+            return;
+        }
+
+        const name = value && value.startsWith('local:') ? value.slice('local:'.length) : value;
         const selected = savedPrompts.find(p => p.name === name);
         if (selected) {
             setPrompt(selected.prompt);
@@ -751,6 +774,16 @@ export const TuDoAITab = ({
         removeImage(imageId);
     };
 
+    const handleClearImages = () => {
+        if (actionsDisabled) {
+            onRequireAuth();
+            return;
+        }
+
+        setErrorMessage('');
+        clearImages();
+    };
+
     const handleSelectFunction = (optionId) => {
         setSelectedFunctionId((current) => (current === optionId ? '' : optionId));
     };
@@ -831,6 +864,7 @@ export const TuDoAITab = ({
                 <div className="flex-row">
                     <button className="btn full-width" onClick={handleAddImage} disabled={actionsDisabled || !canAddMore}>Chọn Ảnh</button>
                     <button className="btn full-width" onClick={() => handleQuickLayerImport(QUICK_LAYER_MODES.CURRENT_LAYER)} disabled={actionsDisabled || !canAddMore}>Layer hiện tại</button>
+                    <button className="btn full-width" onClick={handleClearImages} disabled={actionsDisabled || items.length === 0}>Xóa tất cả</button>
                 </div>
 
                 {restoreNotice ? (
@@ -879,12 +913,19 @@ export const TuDoAITab = ({
                             <span className="prompt-field-label">Cấu hình đã lưu:</span>
                             <select 
                                 className="dropdown prompt-select" 
-                                value={memoName} 
+                                value={memoName ? `local:${memoName}` : ''} 
                                 onChange={(e) => handleLoadSavedPrompt(e.target.value)}
                             >
                                 <option value="">--- Chọn prompt đã lưu ---</option>
+                                {adminPromptOptions.length ? (
+                                    <optgroup label="Admin presets">
+                                        {adminPromptOptions.map((p) => (
+                                            <option key={p.id} value={`admin:${p.id}`}>{p.title}</option>
+                                        ))}
+                                    </optgroup>
+                                ) : null}
                                 {savedPrompts.map(p => (
-                                    <option key={p.name} value={p.name}>{p.name}</option>
+                                    <option key={p.name} value={`local:${p.name}`}>{p.name}</option>
                                 ))}
                             </select>
                         </div>
@@ -897,9 +938,9 @@ export const TuDoAITab = ({
                             placeholder="Mô tả chi tiết nội dung ảnh bạn muốn tạo..."
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            maxLength={500}
+                            maxLength={1000}
                         ></textarea>
-                        <div className="prompt-char-count">{prompt.length}/500</div>
+                        <div className="prompt-char-count">{prompt.length}/1000</div>
                     </div>
 
                     <div className="prompt-footer-row">
