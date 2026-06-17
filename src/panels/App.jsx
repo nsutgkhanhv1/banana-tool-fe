@@ -25,6 +25,7 @@ import { appendHistoryItem, loadHistoryItems, updateHistoryItemInsertState } fro
 import { ThayNenTab } from "./tabs/ThayNenTab.jsx";
 import { PhucCheTab } from "./tabs/PhucCheTab.jsx";
 import { TuDoAITab } from "./tabs/TuDoAITab.jsx";
+import { entrypoints } from "uxp";
 
 const DEFAULT_TAB = "thaynen";
 const TAB_STORAGE_KEY = "banana-tool.shell.active-tab";
@@ -694,6 +695,24 @@ export const App = () => {
 
     const handleHeaderAction = useCallback((action) => {
         if (refreshStatus === "refreshing") {
+            return;
+        }
+
+        if (action === "legacy-tools") {
+            try {
+                const panel = entrypoints && typeof entrypoints.getPanel === "function"
+                    ? entrypoints.getPanel("legacyTools")
+                    : null;
+
+                if (panel && typeof panel.show === "function") {
+                    panel.show();
+                    return;
+                }
+
+                showToast("Hay mo panel Meko Retouch Tools tu menu Plugins cua Photoshop.", "info");
+            } catch (error) {
+                showToast("Chua the mo panel Retouch Tools tu menu nay. Hay mo tu menu Plugins cua Photoshop.", "warning");
+            }
             return;
         }
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 
 const AUTHENTICATED_MENU_ITEMS = [
+    { id: "legacy-tools", label: "RETOUCH TOOLS" },
     { id: "account", label: "TÀI KHOẢN" },
     { id: "history", label: "LỊCH SỬ" },
     { id: "purchase", label: "MUA GÓI" },
@@ -9,6 +10,7 @@ const AUTHENTICATED_MENU_ITEMS = [
 ];
 
 const GUEST_MENU_ITEMS = [
+    { id: "legacy-tools", label: "RETOUCH TOOLS" },
     { id: "account", label: "ĐĂNG NHẬP" },
     { id: "purchase", label: "MUA GÓI" }
 ];

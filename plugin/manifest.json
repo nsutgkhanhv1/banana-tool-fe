@@ -49,6 +49,17 @@
       }
     },
     {
+      "type": "command",
+      "id": "openLegacyTools",
+      "label": {
+        "default": "Open Meko Retouch Tools"
+      },
+      "shortcut": {
+        "mac": "shift+cmd+R",
+        "win": "ctrl+alt+R"
+      }
+    },
+    {
       "type": "panel",
       "id": "demos",
       "label": {
@@ -69,6 +80,63 @@
       "preferredFloatingSize": {
         "width": 430,
         "height": 860
+      },
+      "icons": [
+        {
+          "width": 23,
+          "height": 23,
+          "path": "icons/icon-panel.png",
+          "scale": [
+            1,
+            2
+          ],
+          "theme": [
+            "dark",
+            "darkest"
+          ],
+          "species": [
+            "toolbar"
+          ]
+        },
+        {
+          "width": 23,
+          "height": 23,
+          "path": "icons/icon-panel.png",
+          "scale": [
+            1,
+            2
+          ],
+          "theme": [
+            "lightest",
+            "light"
+          ],
+          "species": [
+            "toolbar"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "panel",
+      "id": "legacyTools",
+      "label": {
+        "default": "Meko Retouch Tools"
+      },
+      "minimumSize": {
+        "width": 430,
+        "height": 640
+      },
+      "maximumSize": {
+        "width": 520,
+        "height": 900
+      },
+      "preferredDockedSize": {
+        "width": 430,
+        "height": 760
+      },
+      "preferredFloatingSize": {
+        "width": 430,
+        "height": 760
       },
       "icons": [
         {

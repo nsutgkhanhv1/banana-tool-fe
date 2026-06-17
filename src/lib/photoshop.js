@@ -131,7 +131,7 @@ const normalizeFileSelection = (value) => {
 
 const getActiveLayer = (document) => {
     const activeLayers = toArray(document && document.activeLayers);
-    return activeLayers[0] || document.activeLayer || null;
+    return document.activeLayer || activeLayers[0] || null;
 };
 
 const findLayerById = (layers, layerId) => {
