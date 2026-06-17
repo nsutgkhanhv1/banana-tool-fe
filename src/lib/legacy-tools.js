@@ -147,7 +147,7 @@ const deleteLayerById = (layerId) => ({
     }
 });
 
-const fillWithGray = () => ({
+const fillWithRgb = ({ red, green, blue, opacity = 100 }) => ({
     _obj: "fill",
     using: {
         _enum: "fillContents",
@@ -155,13 +155,13 @@ const fillWithGray = () => ({
     },
     color: {
         _obj: "RGBColor",
-        red: 128,
-        grain: 128,
-        blue: 128
+        red,
+        grain: green,
+        blue
     },
     opacity: {
         _unit: "percentUnit",
-        _value: 100
+        _value: opacity
     },
     mode: {
         _enum: "blendMode",
@@ -170,6 +170,12 @@ const fillWithGray = () => ({
     _options: {
         dialogOptions: "dontDisplay"
     }
+});
+
+const fillWithGray = () => fillWithRgb({
+    red: 128,
+    green: 128,
+    blue: 128
 });
 
 const highPass = (radius) => ({
@@ -291,6 +297,88 @@ const makeSolidColorLayer = ({ name, red, green, blue }) => ({
                 red,
                 grain: green,
                 blue
+            }
+        }
+    },
+    _options: {
+        dialogOptions: "dontDisplay"
+    }
+});
+
+const makeGradientMapLayer = ({ name }) => ({
+    _obj: "make",
+    _target: [{
+        _ref: "adjustmentLayer"
+    }],
+    using: {
+        _obj: "adjustmentLayer",
+        name,
+        type: {
+            _obj: "gradientMapClass",
+            gradientsInterpolationMethod: {
+                _enum: "gradientInterpolationMethodType",
+                _value: "perceptual"
+            },
+            gradient: {
+                _obj: "gradientClassEvent",
+                name: "Foreground to Background",
+                gradientForm: {
+                    _enum: "gradientForm",
+                    _value: "customStops"
+                },
+                interfaceIconFrameDimmed: 4096,
+                colors: [
+                    {
+                        _obj: "colorStop",
+                        color: {
+                            _obj: "RGBColor",
+                            red: 0,
+                            grain: 0,
+                            blue: 0
+                        },
+                        type: {
+                            _enum: "colorStopType",
+                            _value: "userStop"
+                        },
+                        location: 0,
+                        midpoint: 50
+                    },
+                    {
+                        _obj: "colorStop",
+                        color: {
+                            _obj: "RGBColor",
+                            red: 255,
+                            grain: 255,
+                            blue: 255
+                        },
+                        type: {
+                            _enum: "colorStopType",
+                            _value: "userStop"
+                        },
+                        location: 4096,
+                        midpoint: 50
+                    }
+                ],
+                transparency: [
+                    {
+                        _obj: "transferSpec",
+                        opacity: {
+                            _unit: "percentUnit",
+                            _value: 100
+                        },
+                        location: 0,
+                        midpoint: 50
+                    },
+                    {
+                        _obj: "transferSpec",
+                        opacity: {
+                            _unit: "percentUnit",
+                            _value: 100
+                        },
+                        location: 4096,
+                        midpoint: 50
+                    }
+                ]
             }
         }
     },
@@ -601,6 +689,45 @@ const surfaceBlur = ({ radius, threshold }) => ({
     }
 });
 
+const brightnessContrast = ({ brightness = 0, contrast = 0 }) => ({
+    _obj: "brightnessEvent",
+    brightness: Math.round(brightness),
+    center: Math.round(contrast),
+    useLegacy: false,
+    _options: {
+        dialogOptions: "dontDisplay"
+    }
+});
+
+const resizeImage = ({ width, height, interpolation = "bicubicAutomatic" }) => ({
+    _obj: "imageSize",
+    width: {
+        _unit: "pixelsUnit",
+        _value: width
+    },
+    height: {
+        _unit: "pixelsUnit",
+        _value: height
+    },
+    scaleStyles: true,
+    constrainProportions: true,
+    interpolation: {
+        _enum: "interpolationType",
+        _value: interpolation
+    },
+    _options: {
+        dialogOptions: "dontDisplay"
+    }
+});
+
+const normalizeDimension = (value) => {
+    if (value && typeof value === "object" && typeof value.value === "number") {
+        return value.value;
+    }
+
+    return typeof value === "number" ? value : null;
+};
+
 const clampNumber = (value, fallback, min, max) => {
     const number = Number(value);
     if (!Number.isFinite(number)) {
@@ -610,57 +737,83 @@ const clampNumber = (value, fallback, min, max) => {
     return Math.min(max, Math.max(min, number));
 };
 
-export const runDodgeBurnGrayLayer = async ({ opacity = 100 } = {}) => {
+export const runDodgeBurnGrayLayer = async ({ opacity = 100, blendMode = "overlay" } = {}) => {
     const resolvedOpacity = clampNumber(opacity, 100, 1, 100);
+    const resolvedBlendMode = blendMode === "softLight" ? "softLight" : "overlay";
 
     await executeLegacyTool("MEKO D&B 50 Gray", async () => {
         await runBatchPlay([
             makeLayer({
-                name: "MEKO D&B 50% Gray",
-                mode: "softLight",
+                name: "D&B 50% Gray | Mekomedia.vn",
+                mode: resolvedBlendMode,
                 opacity: resolvedOpacity
             }),
             fillWithGray()
         ]);
     });
 
-    return "Da tao layer D&B 50% Gray.";
+    return "Da tao layer D&B 50% Gray legacy.";
 };
 
-export const runDodgeBurnCurves = async ({ strength = 32 } = {}) => {
+export const runDodgeBurnCurves = async ({ strength = 32, legacyMode = true } = {}) => {
     const resolvedStrength = Math.round(clampNumber(strength, 32, 5, 100));
     const dodgeMidpoint = Math.min(228, 128 + resolvedStrength);
     const burnMidpoint = Math.max(27, 128 - resolvedStrength);
+    const burnPoints = legacyMode
+        ? [[0, 0], [165, 125], [255, 255]]
+        : [[0, 0], [128, burnMidpoint], [255, 255]];
+    const dodgePoints = legacyMode
+        ? [[0, 0], [85, 125], [255, 255]]
+        : [[0, 0], [128, dodgeMidpoint], [255, 255]];
 
     await executeLegacyTool("MEKO D&B Curves", async () => {
         await runBatchPlay([
-            makeCurvesLayer({
-                name: "MEKO D&B Burn",
-                midpoint: burnMidpoint
+            makeCurvesLayerWithPoints({
+                name: legacyMode ? "Burn" : "MEKO D&B Burn",
+                points: burnPoints
             }),
             invertActiveChannel(),
-            makeCurvesLayer({
-                name: "MEKO D&B Dodge",
-                midpoint: dodgeMidpoint
+            selectCompositeChannel(),
+            makeCurvesLayerWithPoints({
+                name: legacyMode ? "Dodge" : "MEKO D&B Dodge",
+                points: dodgePoints
             }),
-            invertActiveChannel()
+            invertActiveChannel(),
+            selectCompositeChannel()
         ]);
     });
 
-    return "Da tao cap Curves Dodge/Burn voi mask den.";
+    return legacyMode
+        ? "Da tao cap Curves Dodge/Burn theo recipe legacy."
+        : "Da tao cap Curves Dodge/Burn voi mask den.";
 };
 
-export const runDodgeBurnMaster = async ({ strength = 32, opacity = 100, checkMode = "bw" } = {}) => {
+export const runDodgeBurnMaster = async ({ mode = "standard", strength = 32, opacity = 100, checkMode = "bw" } = {}) => {
     const resolvedStrength = Math.round(clampNumber(strength, 32, 5, 100));
     const resolvedOpacity = clampNumber(opacity, 100, 1, 100);
     const resolvedCheckMode = checkMode === "solar" || checkMode === "none" ? checkMode : "bw";
+    const resolvedMode = [
+        "standard",
+        "softLight",
+        "contour",
+        "overlay",
+        "screen",
+        "contourRa",
+        "multiply",
+        "sangAi",
+        "khoiAi",
+        "toiAi",
+        "sangAiPlus",
+        "khoiAiPlus",
+        "toiAiPlus"
+    ].includes(mode) ? mode : "standard";
     const dodgeMidpoint = Math.min(228, 128 + resolvedStrength);
     const burnMidpoint = Math.max(27, 128 - resolvedStrength);
+    const layerIds = [];
 
     await executeLegacyTool("MEKO D&B Master", async () => {
         const photoshop = getPhotoshopModule();
         const document = photoshop.app.activeDocument;
-        const layerIds = [];
         const captureLayer = () => {
             const layer = document.activeLayers && document.activeLayers[0];
             if (!layer) {
@@ -668,80 +821,216 @@ export const runDodgeBurnMaster = async ({ strength = 32, opacity = 100, checkMo
             }
             layerIds.push(Number(layer.id));
         };
+        const addGrayPaintLayer = async ({ name, blend }) => {
+            await runBatchPlay([
+                makeLayer({ name, mode: blend, opacity: resolvedOpacity }),
+                fillWithGray()
+            ]);
+            captureLayer();
+        };
+        const addPaintLayer = async ({ name, blend }) => {
+            await runBatchPlay([
+                makeLayer({ name, mode: blend, opacity: resolvedOpacity })
+            ]);
+            captureLayer();
+        };
+        const addMaskedCurve = async ({ name, midpoint, blend = "luminosity" }) => {
+            await runBatchPlay([
+                makeCurvesLayer({ name, midpoint }),
+                invertActiveChannel(),
+                selectCompositeChannel(),
+                setActiveLayerOptions({ mode: blend, opacity: resolvedOpacity })
+            ]);
+            captureLayer();
+        };
+        const addSupportChecks = async () => {
+            await runBatchPlay([
+                makeSolidColorLayer({
+                    name: "Hỗ trợ - B&W Check",
+                    red: 0,
+                    green: 0,
+                    blue: 0
+                }),
+                setActiveLayerOptions({
+                    mode: "color",
+                    visible: resolvedCheckMode === "bw"
+                })
+            ]);
+            captureLayer();
 
-        await runBatchPlay([
-            makeCurvesLayer({
-                name: "MEKO D&B Master - Burn",
-                midpoint: burnMidpoint
-            }),
-            invertActiveChannel(),
-            setActiveLayerOptions({
-                mode: "luminosity",
-                opacity: resolvedOpacity
-            })
-        ]);
-        captureLayer();
+            await runBatchPlay([
+                makeCurvesLayerWithPoints({
+                    name: "Hỗ trợ - Solar Check",
+                    points: [
+                        [0, 0], [32, 255], [64, 0], [96, 255], [128, 0],
+                        [160, 255], [192, 0], [224, 255], [255, 0]
+                    ]
+                }),
+                setActiveLayerOptions({
+                    mode: "luminosity",
+                    visible: resolvedCheckMode === "solar"
+                })
+            ]);
+            captureLayer();
+        };
 
-        await runBatchPlay([
-            makeCurvesLayer({
-                name: "MEKO D&B Master - Dodge",
-                midpoint: dodgeMidpoint
-            }),
-            invertActiveChannel(),
-            setActiveLayerOptions({
-                mode: "luminosity",
-                opacity: resolvedOpacity
-            })
-        ]);
-        captureLayer();
+        if (resolvedMode === "softLight") {
+            await addGrayPaintLayer({ name: "Đánh Khối Soft Light", blend: "softLight" });
+        } else if (resolvedMode === "overlay") {
+            await addGrayPaintLayer({ name: "Đánh Khối Overlay", blend: "overlay" });
+        } else if (resolvedMode === "screen") {
+            await addPaintLayer({ name: "Screen", blend: "screen" });
+        } else if (resolvedMode === "multiply") {
+            await addPaintLayer({ name: "Multiply", blend: "multiply" });
+        } else if (resolvedMode === "contour" || resolvedMode === "contourRa") {
+            await addMaskedCurve({ name: "Khối Tối", midpoint: burnMidpoint });
+            await addMaskedCurve({ name: "Khối Sáng", midpoint: dodgeMidpoint });
+            await addSupportChecks();
+        } else if (resolvedMode === "sangAi") {
+            await addMaskedCurve({ name: "Đánh sáng AI", midpoint: dodgeMidpoint, blend: "screen" });
+            await addSupportChecks();
+        } else if (resolvedMode === "toiAi") {
+            await addMaskedCurve({ name: "Đánh tối AI", midpoint: burnMidpoint, blend: "multiply" });
+            await addSupportChecks();
+        } else if (resolvedMode === "khoiAi") {
+            await addMaskedCurve({ name: "Tối", midpoint: burnMidpoint, blend: "multiply" });
+            await addMaskedCurve({ name: "Sáng", midpoint: dodgeMidpoint, blend: "screen" });
+            await addSupportChecks();
+        } else if (resolvedMode === "sangAiPlus") {
+            await addPaintLayer({ name: "Sáng", blend: "screen" });
+            await addMaskedCurve({ name: "Đánh sáng AI", midpoint: dodgeMidpoint, blend: "screen" });
+            await addSupportChecks();
+        } else if (resolvedMode === "toiAiPlus") {
+            await addPaintLayer({ name: "Đánh tối AI", blend: "multiply" });
+            await addMaskedCurve({ name: "Đánh tối AI", midpoint: burnMidpoint, blend: "multiply" });
+            await addSupportChecks();
+        } else if (resolvedMode === "khoiAiPlus") {
+            await addPaintLayer({ name: "Đánh tối", blend: "multiply" });
+            await addPaintLayer({ name: "Đánh sáng", blend: "screen" });
+            await addMaskedCurve({ name: "Đánh khối AI", midpoint: burnMidpoint });
+            await addSupportChecks();
+        } else {
+            await addMaskedCurve({ name: "MEKO D&B Master - Burn", midpoint: burnMidpoint });
+            await addMaskedCurve({ name: "MEKO D&B Master - Dodge", midpoint: dodgeMidpoint });
+            await addSupportChecks();
+        }
 
-        await runBatchPlay([
-            makeSolidColorLayer({
-                name: "MEKO D&B Master - B&W Check",
-                red: 0,
-                green: 0,
-                blue: 0
-            }),
-            setActiveLayerOptions({
-                mode: "color",
-                visible: resolvedCheckMode === "bw"
-            })
-        ]);
-        captureLayer();
-
-        await runBatchPlay([
-            makeCurvesLayerWithPoints({
-                name: "MEKO D&B Master - Solar Check",
-                points: [
-                    [0, 0],
-                    [32, 255],
-                    [64, 0],
-                    [96, 255],
-                    [128, 0],
-                    [160, 255],
-                    [192, 0],
-                    [224, 255],
-                    [255, 0]
-                ]
-            }),
-            setActiveLayerOptions({
-                mode: "luminosity",
-                visible: resolvedCheckMode === "solar"
-            })
-        ]);
-        captureLayer();
-
-        await runBatchPlay([
-            selectLayerById(layerIds[0]),
-            ...layerIds.slice(1).map((layerId) => selectLayerById(layerId, true)),
-            groupSelectedLayers("MEKO D&B Master")
-        ]);
+        if (layerIds.length > 1) {
+            await runBatchPlay([
+                selectLayerById(layerIds[0]),
+                ...layerIds.slice(1).map((layerId) => selectLayerById(layerId, true)),
+                groupSelectedLayers(resolvedMode === "standard" ? "MEKO D&B Master" : "Đánh Khối Master | MEKO")
+            ]);
+        }
     });
 
     const checkLabel = resolvedCheckMode === "bw"
         ? "B&W Check"
         : resolvedCheckMode === "solar" ? "Solar Check" : "khong bat Check layer";
-    return `Da tao D&B Master, dang bat ${checkLabel}.`;
+    return `Da tao D&B Master mode ${resolvedMode}, dang bat ${checkLabel}.`;
+};
+
+export const runColorCorrectionPro = async ({ hueShift = 25, saturationShift = 25, gradientOpacity = 0 } = {}) => {
+    const resolvedHueShift = Math.round(clampNumber(hueShift, 25, 1, 180));
+    const resolvedSaturationShift = Math.round(clampNumber(saturationShift, 25, 1, 100));
+    const resolvedGradientOpacity = clampNumber(gradientOpacity, 0, 0, 100);
+
+    await executeLegacyTool("MEKO Color Correction Pro", async () => {
+        const photoshop = getPhotoshopModule();
+        const document = photoshop.app.activeDocument;
+        const hueLayerIds = [];
+        const saturationLayerIds = [];
+        const groupIds = [];
+        const captureLayerId = (target) => {
+            const layer = document.activeLayers && document.activeLayers[0];
+            if (!layer) {
+                throw createError("Khong tao duoc layer Color Correction Pro.", "COLOR_CORRECTION_PRO_FAILED");
+            }
+            target.push(Number(layer.id));
+        };
+
+        await runBatchPlay([
+            makeGradientMapLayer({
+                name: "Gradient skin - Hue fix"
+            }),
+            setActiveLayerOptions({
+                mode: "color",
+                opacity: resolvedGradientOpacity
+            }),
+            selectCompositeChannel()
+        ]);
+        captureLayerId(hueLayerIds);
+
+        await runBatchPlay([
+            makeHueSaturationLayer({
+                name: "Dark - Hue fix",
+                hue: resolvedHueShift,
+                saturation: 0,
+                lightness: 0
+            }),
+            invertActiveChannel(),
+            selectCompositeChannel()
+        ]);
+        captureLayerId(hueLayerIds);
+
+        await runBatchPlay([
+            makeHueSaturationLayer({
+                name: "Light - Hue fix",
+                hue: -resolvedHueShift,
+                saturation: 0,
+                lightness: 0
+            }),
+            invertActiveChannel(),
+            selectCompositeChannel()
+        ]);
+        captureLayerId(hueLayerIds);
+
+        await runBatchPlay([
+            selectLayerById(hueLayerIds[0]),
+            ...hueLayerIds.slice(1).map((layerId) => selectLayerById(layerId, true)),
+            groupSelectedLayers("Hue correction - Color correction")
+        ]);
+        captureLayerId(groupIds);
+
+        await runBatchPlay([
+            makeHueSaturationLayer({
+                name: "+ Saturation fix",
+                hue: 0,
+                saturation: resolvedSaturationShift,
+                lightness: 0
+            }),
+            invertActiveChannel(),
+            selectCompositeChannel()
+        ]);
+        captureLayerId(saturationLayerIds);
+
+        await runBatchPlay([
+            makeHueSaturationLayer({
+                name: "- Saturation fix",
+                hue: 0,
+                saturation: -resolvedSaturationShift,
+                lightness: 0
+            }),
+            invertActiveChannel(),
+            selectCompositeChannel()
+        ]);
+        captureLayerId(saturationLayerIds);
+
+        await runBatchPlay([
+            selectLayerById(saturationLayerIds[0]),
+            selectLayerById(saturationLayerIds[1], true),
+            groupSelectedLayers("Saturation correction - Color correction")
+        ]);
+        captureLayerId(groupIds);
+
+        await runBatchPlay([
+            selectLayerById(groupIds[0]),
+            selectLayerById(groupIds[1], true),
+            groupSelectedLayers("Color correction - Meko media")
+        ]);
+    });
+
+    return "Da tao group Color Correction Pro theo legacy.";
 };
 
 export const runColorRetouchLayer = async ({ opacity = 100 } = {}) => {
@@ -779,21 +1068,200 @@ export const runHighPassSharpen = async ({ radius = 2, opacity = 70, blendMode =
     return "Da tao layer High Pass.";
 };
 
-export const runAddNoiseLayer = async ({ amount = 2, gaussian = true, monochromatic = true } = {}) => {
-    const resolvedAmount = clampNumber(amount, 2, 0.1, 400);
+export const runAddNoiseLayer = async ({
+    amount = 25.98,
+    blurRadius = 1.1,
+    opacity = 100,
+    gaussian = false,
+    monochromatic = false,
+    legacyMode = true
+} = {}) => {
+    const resolvedAmount = clampNumber(amount, 25.98, 0.1, 400);
+    const resolvedBlurRadius = clampNumber(blurRadius, 1.1, 0, 100);
+    const resolvedOpacity = clampNumber(opacity, 100, 1, 100);
 
     await executeLegacyTool("MEKO Add Noise", async () => {
-        await runBatchPlay([
-            duplicateActiveLayer("MEKO Add Noise"),
+        if (!legacyMode) {
+            await runBatchPlay([
+                duplicateActiveLayer("MEKO Add Noise"),
+                addNoise({
+                    amount: resolvedAmount,
+                    gaussian,
+                    monochromatic
+                })
+            ]);
+            return;
+        }
+
+        const commands = [
+            makeLayer({
+                name: "Add Noise|Mekomedia.vn",
+                mode: "normal",
+                opacity: 100
+            }),
+            fillWithRgb({
+                red: 154,
+                green: 154,
+                blue: 154
+            }),
             addNoise({
                 amount: resolvedAmount,
                 gaussian,
                 monochromatic
             })
+        ];
+
+        if (resolvedBlurRadius > 0) {
+            commands.push(gaussianBlur(resolvedBlurRadius));
+        }
+
+        commands.push(setActiveLayerOptions({
+            mode: "softLight",
+            opacity: resolvedOpacity
+        }));
+
+        await runBatchPlay(commands);
+    });
+
+    return legacyMode
+        ? "Da tao layer Add Noise kieu legacy: fill mau, noise, blur va Soft Light."
+        : "Da tao layer Add Noise tu layer hien tai.";
+};
+
+export const runDreamyBlur = async ({ blurRadius = 100, screenOpacity = 47, groupOpacity = 100 } = {}) => {
+    const resolvedBlurRadius = clampNumber(blurRadius, 100, 0.1, 250);
+    const resolvedScreenOpacity = clampNumber(screenOpacity, 47, 1, 100);
+    const resolvedGroupOpacity = clampNumber(groupOpacity, 100, 1, 100);
+
+    await executeLegacyTool("MEKO Mo Ao Nang Tho", async () => {
+        const photoshop = getPhotoshopModule();
+        const document = photoshop.app.activeDocument;
+        const sourceLayer = document.activeLayers && document.activeLayers[0];
+
+        if (!sourceLayer) {
+            throw createError("Hay chon mot layer anh truoc khi chay Mo Ao.", "NO_ACTIVE_LAYER");
+        }
+
+        await runBatchPlay([
+            duplicateLayerById(Number(sourceLayer.id), "MEKO Nang Tho - Soft Light"),
+            gaussianBlur(resolvedBlurRadius),
+            setActiveLayerOptions({
+                mode: "softLight"
+            })
+        ]);
+        const softLayer = document.activeLayers && document.activeLayers[0];
+
+        if (!softLayer) {
+            throw createError("Khong tao duoc layer Mo Ao Soft Light.", "DREAMY_BLUR_FAILED");
+        }
+
+        await runBatchPlay([
+            duplicateLayerById(Number(softLayer.id), "MEKO Nang Tho - Screen"),
+            setActiveLayerOptions({
+                mode: "screen",
+                opacity: resolvedScreenOpacity
+            })
+        ]);
+        const screenLayer = document.activeLayers && document.activeLayers[0];
+
+        if (!screenLayer) {
+            throw createError("Khong tao duoc layer Mo Ao Screen.", "DREAMY_BLUR_FAILED");
+        }
+
+        await runBatchPlay([
+            selectLayerById(Number(softLayer.id)),
+            selectLayerById(Number(screenLayer.id), true),
+            groupSelectedLayers("Meko - hieu ung nang tho"),
+            setActiveLayerOptions({
+                opacity: resolvedGroupOpacity
+            })
         ]);
     });
 
-    return "Da tao layer Add Noise.";
+    return "Da tao hieu ung Mo Ao / Nang Tho.";
+};
+
+export const runHighlightBoost = async ({ brightness = 55, range = 45, blurDivisor = 10 } = {}) => {
+    const resolvedBrightness = clampNumber(brightness, 55, 1, 100);
+    const resolvedRange = clampNumber(range, 45, 1, 100);
+    const resolvedBlur = Math.max(0.1, resolvedRange / clampNumber(blurDivisor, 10, 1, 50));
+
+    await executeLegacyTool("MEKO Highlight Boost", async () => {
+        await runBatchPlay([
+            duplicateActiveLayer("MEKO Highlight Boost"),
+            setActiveLayerOptions({
+                mode: "screen",
+                opacity: resolvedBrightness
+            }),
+            gaussianBlur(resolvedBlur)
+        ]);
+    });
+
+    return "Da tao layer Highlight Boost.";
+};
+
+export const runDarkBoost = async ({ strength = 35, range = 40, contrast = null } = {}) => {
+    const resolvedStrength = clampNumber(strength, 35, 1, 100);
+    const resolvedRange = clampNumber(range, 40, 1, 100);
+    const resolvedContrast = contrast === null || contrast === undefined
+        ? resolvedRange / 2
+        : clampNumber(contrast, resolvedRange / 2, -100, 100);
+
+    await executeLegacyTool("MEKO Dark Boost", async () => {
+        await runBatchPlay([
+            duplicateActiveLayer("MEKO Dark Boost"),
+            setActiveLayerOptions({
+                mode: "multiply",
+                opacity: resolvedStrength
+            }),
+            gaussianBlur(Math.max(0.1, resolvedRange / 12)),
+            brightnessContrast({
+                brightness: 0,
+                contrast: resolvedContrast
+            })
+        ]);
+    });
+
+    return "Da tao layer Dark Boost.";
+};
+
+export const runUpscalePro = async ({ scale = 2, method = "preserveDetailsUpscale", sharpen = true } = {}) => {
+    const resolvedScale = clampNumber(scale, 2, 1, 4);
+    const interpolationMap = {
+        preserveDetailsUpscale: "preserveDetailsUpscale",
+        smooth: "bicubicSmoother",
+        automatic: "bicubicAutomatic"
+    };
+    const resolvedInterpolation = interpolationMap[method] || interpolationMap.preserveDetailsUpscale;
+
+    await executeLegacyTool("MEKO Upscale Pro", async () => {
+        const photoshop = getPhotoshopModule();
+        const document = photoshop.app.activeDocument;
+        const width = normalizeDimension(document && document.width);
+        const height = normalizeDimension(document && document.height);
+
+        if (!width || !height) {
+            throw createError("Khong doc duoc kich thuoc document de upscale.", "INVALID_UPSCALE_DIMENSIONS");
+        }
+
+        const commands = [resizeImage({
+            width: Math.max(1, Math.round(width * resolvedScale)),
+            height: Math.max(1, Math.round(height * resolvedScale)),
+            interpolation: resolvedInterpolation
+        })];
+
+        if (sharpen) {
+            commands.push(unsharpMask({
+                amount: 80,
+                radius: 0.8,
+                threshold: 2
+            }));
+        }
+
+        await runBatchPlay(commands);
+    });
+
+    return `Da upscale anh ${resolvedScale}x${sharpen ? " va sharpen nhe" : ""}.`;
 };
 
 export const runSmoothNoiseLayer = async ({ radius = 3, threshold = 12, opacity = 100 } = {}) => {
@@ -815,6 +1283,187 @@ export const runSmoothNoiseLayer = async ({ radius = 3, threshold = 12, opacity 
     });
 
     return "Da tao layer Smooth Noise.";
+};
+
+export const runCheckTextureLegacy = async ({ includeDodgeBurn = true, activeView = "skinBlemish" } = {}) => {
+    const validViews = new Set(["skinBlemish", "solarize", "blackWhite", "invert", "all"]);
+    const resolvedView = validViews.has(activeView) ? activeView : "skinBlemish";
+
+    await executeLegacyTool("MEKO Check Texture", async () => {
+        const photoshop = getPhotoshopModule();
+        const document = photoshop.app.activeDocument;
+        const layerIds = [];
+        const captureLayer = () => {
+            const layer = document.activeLayers && document.activeLayers[0];
+            if (!layer) {
+                throw createError("Khong tao duoc Check Texture layer.", "CHECK_TEXTURE_FAILED");
+            }
+            layerIds.push(Number(layer.id));
+        };
+
+        if (includeDodgeBurn) {
+            await runBatchPlay([
+                makeLayer({
+                    name: "D&B",
+                    mode: "softLight",
+                    opacity: 100
+                }),
+                fillWithGray()
+            ]);
+            captureLayer();
+        }
+
+        await runBatchPlay([
+            makeCurvesLayerWithPoints({
+                name: "Skin Blemish",
+                points: [[0, 0], [56, 92], [128, 128], [200, 164], [255, 255]]
+            }),
+            setActiveLayerOptions({
+                visible: resolvedView === "skinBlemish" || resolvedView === "all"
+            })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeCurvesLayerWithPoints({
+                name: "Solarize",
+                points: [[0, 0], [64, 255], [128, 0], [192, 255], [255, 0]]
+            }),
+            setActiveLayerOptions({
+                visible: resolvedView === "solarize" || resolvedView === "all"
+            })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeHueSaturationLayer({
+                name: "Black/White",
+                saturation: -100
+            }),
+            setActiveLayerOptions({
+                visible: resolvedView === "blackWhite" || resolvedView === "all"
+            })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeCurvesLayerWithPoints({
+                name: "Invert",
+                points: [[0, 255], [255, 0]]
+            }),
+            setActiveLayerOptions({
+                visible: resolvedView === "invert" || resolvedView === "all"
+            })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            selectLayerById(layerIds[0]),
+            ...layerIds.slice(1).map((layerId) => selectLayerById(layerId, true)),
+            groupSelectedLayers("Check Layer")
+        ]);
+    });
+
+    return "Da tao group Check Texture theo legacy.";
+};
+
+export const runCheckTextureProLegacy = async ({ activeView = "skinBlemish" } = {}) => {
+    const validViews = new Set(["saturation", "color", "hue", "luminosity", "negative", "contract", "testColor", "skinBlemish", "desaturate", "invert", "all"]);
+    const resolvedView = validViews.has(activeView) ? activeView : "skinBlemish";
+    const isVisible = (view) => resolvedView === view || resolvedView === "all";
+
+    await executeLegacyTool("MEKO Check Texture Pro", async () => {
+        const photoshop = getPhotoshopModule();
+        const document = photoshop.app.activeDocument;
+        const layerIds = [];
+        const captureLayer = () => {
+            const layer = document.activeLayers && document.activeLayers[0];
+            if (!layer) {
+                throw createError("Khong tao duoc Check Texture Pro layer.", "CHECK_TEXTURE_PRO_FAILED");
+            }
+            layerIds.push(Number(layer.id));
+        };
+
+        await runBatchPlay([
+            makeHueSaturationLayer({ name: "Saturation", saturation: 60 }),
+            setActiveLayerOptions({ mode: "luminosity", visible: isVisible("saturation") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeHueSaturationLayer({ name: "Color", saturation: 100 }),
+            setActiveLayerOptions({ mode: "color", visible: isVisible("color") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeHueSaturationLayer({ name: "Hue", hue: 15, saturation: 0 }),
+            setActiveLayerOptions({ mode: "hue", visible: isVisible("hue") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeHueSaturationLayer({ name: "Luminosity", saturation: -100 }),
+            setActiveLayerOptions({ mode: "luminosity", visible: isVisible("luminosity") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeCurvesLayerWithPoints({ name: "Negative", points: [[0, 255], [255, 0]] }),
+            setActiveLayerOptions({ visible: isVisible("negative") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeCurvesLayerWithPoints({ name: "Contract", points: [[0, 0], [96, 64], [160, 192], [255, 255]] }),
+            setActiveLayerOptions({ visible: isVisible("contract") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeSolidColorLayer({ name: "Test Color", red: 128, green: 80, blue: 45 }),
+            setActiveLayerOptions({ mode: "color", visible: isVisible("testColor") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeCurvesLayerWithPoints({ name: "Skin Blemish", points: [[0, 0], [48, 96], [128, 128], [208, 160], [255, 255]] }),
+            setActiveLayerOptions({ visible: isVisible("skinBlemish") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeHueSaturationLayer({ name: "Desaturate", saturation: -100 }),
+            setActiveLayerOptions({ visible: isVisible("desaturate") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeCurvesLayerWithPoints({ name: "Invert ", points: [[0, 255], [255, 0]] }),
+            setActiveLayerOptions({ visible: isVisible("invert") })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeCurvesLayerWithPoints({ name: "Toi", points: [[0, 0], [128, 92], [255, 255]] }),
+            setActiveLayerOptions({ mode: "multiply", visible: false })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            makeCurvesLayerWithPoints({ name: "Sang", points: [[0, 0], [128, 164], [255, 255]] }),
+            setActiveLayerOptions({ mode: "screen", visible: false })
+        ]);
+        captureLayer();
+
+        await runBatchPlay([
+            selectLayerById(layerIds[0]),
+            ...layerIds.slice(1).map((layerId) => selectLayerById(layerId, true)),
+            groupSelectedLayers("Help")
+        ]);
+    });
+
+    return "Da tao group Check Texture Pro theo legacy.";
 };
 
 export const runTextureLayer = async ({ radius = 4, opacity = 45, blendMode = "overlay", monochromatic = true } = {}) => {

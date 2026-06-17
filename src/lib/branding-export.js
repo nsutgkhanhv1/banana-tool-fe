@@ -76,19 +76,75 @@ export const pickLogoFile = async () => {
     return Array.isArray(result) ? result[0] || null : result;
 };
 
+const createTextWatermark = async ({ action, text, font, fontSize, opacity, x, y }) => {
+    await runActionCommands(action, [{
+        _obj: "make",
+        _target: [{ _ref: "textLayer" }],
+        using: {
+            _obj: "textLayer",
+            name: "MEKO Text Watermark",
+            textKey: text,
+            textClickPoint: {
+                _obj: "paint",
+                horizontal: { _unit: "pixelsUnit", _value: x },
+                vertical: { _unit: "pixelsUnit", _value: y }
+            },
+            textStyleRange: [{
+                _obj: "textStyleRange",
+                from: 0,
+                to: text.length,
+                textStyle: {
+                    _obj: "textStyle",
+                    fontPostScriptName: font,
+                    size: { _unit: "pointsUnit", _value: fontSize },
+                    color: {
+                        _obj: "RGBColor",
+                        red: 255,
+                        grain: 255,
+                        blue: 255
+                    }
+                }
+            }],
+            paragraphStyleRange: [{
+                _obj: "paragraphStyleRange",
+                from: 0,
+                to: text.length,
+                paragraphStyle: {
+                    _obj: "paragraphStyle",
+                    align: { _enum: "alignmentType", _value: "left" }
+                }
+            }]
+        },
+        _options: { dialogOptions: "dontDisplay" }
+    }, {
+        _obj: "set",
+        _target: [{ _ref: "layer", _enum: "ordinal", _value: "targetEnum" }],
+        to: {
+            _obj: "layer",
+            opacity: { _unit: "percentUnit", _value: opacity }
+        },
+        _options: { dialogOptions: "dontDisplay" }
+    }], "Khong tao duoc text watermark.", "TEXT_WATERMARK_FAILED");
+};
+
 export const addLogoToDocument = async ({
     logoFile,
+    watermarkType = "logo",
+    watermarkText = "© Mekomedia.vn",
+    font = "ArialMT",
+    fontSize = 40,
     position = "bottomRight",
-    sizePercent = 18,
+    sizePercent = 20,
     marginPercent = 3,
-    opacity = 100
+    opacity = 80
 } = {}) => {
-    if (!logoFile || !logoFile.isFile) {
+    const resolvedType = watermarkType === "text" ? "text" : "logo";
+    if (resolvedType === "logo" && (!logoFile || !logoFile.isFile)) {
         throw createError("Hay chon file logo.", "MISSING_LOGO_FILE");
     }
 
     const photoshop = getPhotoshop();
-    const { app, core, constants } = photoshop;
+    const { app, core, constants, action } = photoshop;
     const targetDocument = app.activeDocument;
 
     if (!targetDocument) {
@@ -98,15 +154,44 @@ export const addLogoToDocument = async ({
     const resolvedPosition = ["topLeft", "topRight", "bottomLeft", "bottomRight", "center"].includes(position)
         ? position
         : "bottomRight";
-    const resolvedSize = clampNumber(sizePercent, 18, 1, 100);
+    const resolvedSize = clampNumber(sizePercent, 20, 1, 100);
     const resolvedMargin = clampNumber(marginPercent, 3, 0, 25);
-    const resolvedOpacity = clampNumber(opacity, 100, 1, 100);
-    let insertedLayerName = "MEKO Logo";
+    const resolvedOpacity = clampNumber(opacity, 80, 1, 100);
+    const resolvedFontSize = clampNumber(fontSize, 40, 6, 300);
+    let insertedLayerName = resolvedType === "text" ? "MEKO Text Watermark" : "MEKO Logo";
 
     await core.executeAsModal(async () => {
         let logoDocument = null;
 
         try {
+            const documentWidth = normalizeDimension(targetDocument.width);
+            const documentHeight = normalizeDimension(targetDocument.height);
+            if (!documentWidth || !documentHeight) {
+                throw createError("Khong doc duoc kich thuoc document.", "INVALID_WATERMARK_DIMENSIONS");
+            }
+
+            if (resolvedType === "text") {
+                const margin = Math.min(documentWidth, documentHeight) * (resolvedMargin / 100);
+                const text = String(watermarkText || "© Mekomedia.vn");
+                const estimatedWidth = Math.max(120, text.length * resolvedFontSize * 0.55);
+                const targetX = resolvedPosition.endsWith("Right")
+                    ? documentWidth - margin - estimatedWidth
+                    : resolvedPosition.endsWith("Left") ? margin : documentWidth / 2;
+                const targetY = resolvedPosition.startsWith("bottom")
+                    ? documentHeight - margin
+                    : resolvedPosition.startsWith("top") ? margin + resolvedFontSize : documentHeight / 2;
+                await createTextWatermark({
+                    action,
+                    text,
+                    font,
+                    fontSize: resolvedFontSize,
+                    opacity: resolvedOpacity,
+                    x: targetX,
+                    y: targetY
+                });
+                return;
+            }
+
             logoDocument = await app.open(logoFile);
             const sourceLayer = getActiveLayer(logoDocument);
             if (!sourceLayer) {
@@ -120,11 +205,9 @@ export const addLogoToDocument = async ({
             }
 
             app.activeDocument = targetDocument;
-            const documentWidth = normalizeDimension(targetDocument.width);
-            const documentHeight = normalizeDimension(targetDocument.height);
             let bounds = normalizeBounds(logoLayer.boundsNoEffects || logoLayer.bounds);
 
-            if (!documentWidth || !documentHeight || !bounds || bounds.width <= 0 || bounds.height <= 0) {
+            if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
                 throw createError("Khong doc duoc kich thuoc logo/document.", "INVALID_LOGO_DIMENSIONS");
             }
 
@@ -164,33 +247,66 @@ export const addLogoToDocument = async ({
     return `Da chen ${insertedLayerName} vao document.`;
 };
 
-const resizeDocument = async ({ action, width, height }) => {
-    const results = await action.batchPlay([{
-        _obj: "imageSize",
-        width: { _unit: "pixelsUnit", _value: width },
-        height: { _unit: "pixelsUnit", _value: height },
-        scaleStyles: true,
-        constrainProportions: true,
-        interpolation: {
-            _enum: "interpolationType",
-            _value: "bicubicAutomatic"
-        },
-        _options: { dialogOptions: "dontDisplay" }
-    }], {
+const runActionCommands = async (action, commands, errorMessage, errorCode) => {
+    const results = await action.batchPlay(commands, {
         synchronousExecution: false,
         modalBehavior: "execute"
     });
     const failed = results && results.find((result) => result && result._obj === "error");
     if (failed) {
-        throw createError(failed.message || "Khong resize duoc anh.", "FACEBOOK_RESIZE_FAILED");
+        throw createError(failed.message || errorMessage, errorCode);
     }
 };
 
+const resizeDocument = async ({ action, width, height, interpolation = "bicubicAutomatic", constrainProportions = true }) => {
+    await runActionCommands(action, [{
+        _obj: "imageSize",
+        width: { _unit: "pixelsUnit", _value: width },
+        height: { _unit: "pixelsUnit", _value: height },
+        scaleStyles: true,
+        constrainProportions,
+        interpolation: {
+            _enum: "interpolationType",
+            _value: interpolation
+        },
+        _options: { dialogOptions: "dontDisplay" }
+    }], "Khong resize duoc anh.", "FACEBOOK_RESIZE_FAILED");
+};
+
+const flattenDocument = async (action) => runActionCommands(action, [{
+    _obj: "flattenImage",
+    _options: { dialogOptions: "dontDisplay" }
+}], "Khong flatten duoc document.", "FACEBOOK_FLATTEN_FAILED");
+
+const convertToSrgb = async (action) => runActionCommands(action, [{
+    _obj: "convertToProfile",
+    destinationProfile: "sRGB IEC61966-2.1",
+    intent: {
+        _enum: "intent",
+        _value: "perceptual"
+    },
+    blackPointCompensation: true,
+    dither: true,
+    _options: { dialogOptions: "dontDisplay" }
+}], "Khong convert duoc profile sRGB.", "FACEBOOK_SRGB_FAILED");
+
+const applyExportSharpen = async (action) => runActionCommands(action, [{
+    _obj: "unsharpMask",
+    amount: { _unit: "percentUnit", _value: 40 },
+    radius: { _unit: "pixelsUnit", _value: 0.5 },
+    threshold: 0,
+    _options: { dialogOptions: "dontDisplay" }
+}], "Khong sharpen duoc anh export.", "FACEBOOK_SHARPEN_FAILED");
+
 export const exportFacebookImage = async ({
     destinationFolder,
+    exportMode = "longEdge",
     longEdge = "2048",
     quality = 10,
-    overwrite = false
+    overwrite = false,
+    convertSrgb = true,
+    flatten = true,
+    sharpen = true
 } = {}) => {
     if (!destinationFolder || !destinationFolder.isFolder) {
         throw createError("Hay chon thu muc xuat anh.", "MISSING_EXPORT_FOLDER");
@@ -204,9 +320,17 @@ export const exportFacebookImage = async ({
         throw createError("Hay mo document can xuat.", "NO_ACTIVE_DOCUMENT");
     }
 
+    const resolvedMode = ["longEdge", "facebookLandscape", "facebookPortrait"].includes(exportMode)
+        ? exportMode
+        : "longEdge";
     const resolvedLongEdge = Math.round(clampNumber(longEdge, 2048, 640, 8192));
     const resolvedQuality = Math.round(clampNumber(quality, 10, 1, 12));
-    const outputName = `${sanitizeFileName(sourceDocument.title || sourceDocument.name)}_facebook.jpg`;
+    const preset = resolvedMode === "facebookLandscape"
+        ? { width: 2048, height: 1072, suffix: "_FB_Ngang" }
+        : resolvedMode === "facebookPortrait"
+            ? { width: 1350, height: 1688, suffix: "_FB_Dung" }
+            : { width: null, height: null, suffix: "_facebook" };
+    const outputName = `${sanitizeFileName(sourceDocument.title || sourceDocument.name)}${preset.suffix}.jpg`;
     let outputFile = null;
 
     await core.executeAsModal(async () => {
@@ -216,20 +340,51 @@ export const exportFacebookImage = async ({
             exportDocument = await sourceDocument.duplicate(`${sanitizeFileName(sourceDocument.title)} Facebook Export`);
             app.activeDocument = exportDocument;
 
+            if (flatten) {
+                await flattenDocument(action);
+            }
+
+            if (convertSrgb) {
+                try {
+                    await convertToSrgb(action);
+                } catch (profileError) {
+                    // Some Photoshop/Profile setups reject convertToProfile in UXP; keep exporting like legacy fallback.
+                }
+            }
+
             const width = normalizeDimension(exportDocument.width);
             const height = normalizeDimension(exportDocument.height);
             if (!width || !height) {
                 throw createError("Khong doc duoc kich thuoc document.", "INVALID_EXPORT_DIMENSIONS");
             }
 
-            const currentLongEdge = Math.max(width, height);
-            if (currentLongEdge > resolvedLongEdge) {
-                const ratio = resolvedLongEdge / currentLongEdge;
+            if (preset.width && preset.height) {
                 await resizeDocument({
                     action,
-                    width: Math.max(1, Math.round(width * ratio)),
-                    height: Math.max(1, Math.round(height * ratio))
+                    width: preset.width,
+                    height: preset.height,
+                    interpolation: "bicubicSharper",
+                    constrainProportions: false
                 });
+            } else {
+                const currentLongEdge = Math.max(width, height);
+                if (currentLongEdge > resolvedLongEdge) {
+                    const ratio = resolvedLongEdge / currentLongEdge;
+                    await resizeDocument({
+                        action,
+                        width: Math.max(1, Math.round(width * ratio)),
+                        height: Math.max(1, Math.round(height * ratio)),
+                        interpolation: "bicubicSharper"
+                    });
+                }
+            }
+
+            if (sharpen) {
+                try {
+                    await applyExportSharpen(action);
+                } catch (sharpenError) {
+                    // Export should still complete if sharpening is not supported in the current context.
+                }
             }
 
             outputFile = await destinationFolder.createFile(outputName, {
@@ -254,6 +409,10 @@ export const exportFacebookImage = async ({
         commandName: "MEKO Export Facebook",
         timeOut: 10000
     });
+
+    if (preset.width && preset.height) {
+        return `Da xuat ${outputName} theo preset ${preset.width}x${preset.height}.`;
+    }
 
     return `Da xuat ${outputName} voi canh dai toi da ${resolvedLongEdge}px.`;
 };

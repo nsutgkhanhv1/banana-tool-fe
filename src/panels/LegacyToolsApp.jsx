@@ -4,11 +4,15 @@ import { filterAndCopyImages, pickImageFolder } from "../lib/image-filter.js";
 import {
     runAddNoiseLayer,
     runCheckColor,
+    runCheckTextureLegacy,
+    runCheckTextureProLegacy,
     runColorCorrection,
+    runColorCorrectionPro,
     runColorRetouchLayer,
     runDodgeBurnCurves,
     runDodgeBurnGrayLayer,
     runDodgeBurnMaster,
+    runDreamyBlur,
     runFrequencyPro,
     runFrequencySeparation,
     runFixHdrSharpen,
@@ -17,6 +21,7 @@ import {
     runHdrOverall,
     runHdrShadows,
     runHighPassSharpen,
+    runHighlightBoost,
     runHighlightPop,
     runIncreaseBrightness,
     runLuminosityMasks,
@@ -30,7 +35,9 @@ import {
     runSkinHighPass,
     runTextureLayer,
     runTexturePro,
-    runTeethWhitening
+    runTeethWhitening,
+    runDarkBoost,
+    runUpscalePro
 } from "../lib/legacy-tools.js";
 
 const TOOL_GROUPS = [
@@ -67,16 +74,32 @@ const TOOL_GROUPS = [
             {
                 id: "add-logo",
                 label: "Add Logo Meko",
-                description: "Chen logo vao document, scale theo chieu rong anh va can vi tri tu dong.",
+                description: "Chen logo hoac text watermark vao document, scale/can vi tri theo legacy Watermark VIP.",
                 defaults: {
                     logoFile: null,
+                    watermarkType: "logo",
+                    watermarkText: "© Mekomedia.vn",
+                    font: "ArialMT",
+                    fontSize: 40,
                     position: "bottomRight",
-                    sizePercent: 18,
+                    sizePercent: 20,
                     marginPercent: 3,
-                    opacity: 100
+                    opacity: 80
                 },
                 fields: [
+                    {
+                        key: "watermarkType",
+                        label: "Type",
+                        type: "select",
+                        options: [
+                            { value: "logo", label: "Logo Watermark" },
+                            { value: "text", label: "Text Watermark" }
+                        ]
+                    },
                     { key: "logoFile", label: "Logo File", type: "file" },
+                    { key: "watermarkText", label: "Text", type: "text", placeholder: "© Mekomedia.vn" },
+                    { key: "font", label: "Font PS Name", type: "text", placeholder: "ArialMT" },
+                    { key: "fontSize", label: "Font Size", type: "number", min: 6, max: 300, step: 1, suffix: "pt" },
                     {
                         key: "position",
                         label: "Position",
@@ -98,15 +121,29 @@ const TOOL_GROUPS = [
             {
                 id: "export-facebook",
                 label: "Xuat Anh Facebook",
-                description: "Xuat JPEG tu document duplicate, gioi han canh dai va giu nguyen file dang sua.",
+                description: "Xuat JPEG tu document duplicate; co preset Facebook ngang/doc legacy, sRGB, flatten va sharpen nhe.",
                 defaults: {
                     destinationFolder: null,
+                    exportMode: "facebookLandscape",
                     longEdge: "2048",
                     quality: 10,
-                    overwrite: false
+                    overwrite: false,
+                    convertSrgb: true,
+                    flatten: true,
+                    sharpen: true
                 },
                 fields: [
                     { key: "destinationFolder", label: "Thu muc xuat", type: "folder" },
+                    {
+                        key: "exportMode",
+                        label: "Preset",
+                        type: "select",
+                        options: [
+                            { value: "facebookLandscape", label: "Facebook Ngang 2048x1072" },
+                            { value: "facebookPortrait", label: "Facebook Dung 1350x1688" },
+                            { value: "longEdge", label: "Long Edge tu chon" }
+                        ]
+                    },
                     {
                         key: "longEdge",
                         label: "Long Edge",
@@ -118,6 +155,9 @@ const TOOL_GROUPS = [
                         ]
                     },
                     { key: "quality", label: "JPEG Quality", type: "number", min: 1, max: 12, step: 1 },
+                    { key: "convertSrgb", label: "Convert sRGB", type: "checkbox" },
+                    { key: "flatten", label: "Flatten duplicate", type: "checkbox" },
+                    { key: "sharpen", label: "Sharpen nhe", type: "checkbox" },
                     { key: "overwrite", label: "Ghi de file", type: "checkbox" }
                 ],
                 run: exportFacebookImage
@@ -428,6 +468,22 @@ const TOOL_GROUPS = [
                     { key: "blackMask", label: "Black Mask", type: "checkbox" }
                 ],
                 run: runColorCorrection
+            },
+            {
+                id: "color-correction-pro",
+                label: "Color Correction Pro",
+                description: "Tao group Hue/Saturation correction theo JSX legacy: Gradient skin, Dark/Light Hue fix, +/- Saturation fix.",
+                defaults: {
+                    hueShift: 25,
+                    saturationShift: 25,
+                    gradientOpacity: 0
+                },
+                fields: [
+                    { key: "hueShift", label: "Hue Shift", type: "number", min: 1, max: 180, step: 1 },
+                    { key: "saturationShift", label: "Saturation Shift", type: "number", min: 1, max: 100, step: 1 },
+                    { key: "gradientOpacity", label: "Gradient Opacity", type: "number", min: 0, max: 100, step: 1, suffix: "%" }
+                ],
+                run: runColorCorrectionPro
             }
         ]
     },
@@ -466,13 +522,34 @@ const TOOL_GROUPS = [
             {
                 id: "db-master",
                 label: "D&B Master",
-                description: "Tao Dodge/Burn Curves mask den kem B&W va Solar Check trong mot group.",
+                description: "Tao D&B Master theo cac mode legacy: Soft Light, Overlay, Screen, Multiply, danh khoi AI/+ va check layer.",
                 defaults: {
+                    mode: "standard",
                     strength: 32,
                     opacity: 100,
                     checkMode: "bw"
                 },
                 fields: [
+                    {
+                        key: "mode",
+                        label: "Mode",
+                        type: "select",
+                        options: [
+                            { value: "standard", label: "Standard Curves" },
+                            { value: "softLight", label: "Soft Light" },
+                            { value: "contour", label: "Danh khoi" },
+                            { value: "overlay", label: "Overlay" },
+                            { value: "screen", label: "Screen" },
+                            { value: "contourRa", label: "Danh khoi RA" },
+                            { value: "multiply", label: "Multiply" },
+                            { value: "sangAi", label: "Sang AI" },
+                            { value: "khoiAi", label: "Danh khoi AI" },
+                            { value: "toiAi", label: "Toi AI" },
+                            { value: "sangAiPlus", label: "Sang AI+" },
+                            { value: "khoiAiPlus", label: "Danh khoi AI+" },
+                            { value: "toiAiPlus", label: "Toi AI+" }
+                        ]
+                    },
                     { key: "strength", label: "Strength", type: "number", min: 5, max: 100, step: 1 },
                     { key: "opacity", label: "D&B Opacity", type: "number", min: 1, max: 100, step: 1, suffix: "%" },
                     {
@@ -491,24 +568,36 @@ const TOOL_GROUPS = [
             {
                 id: "db-gray",
                 label: "D&B 50% Gray",
-                description: "Tao layer 50% gray o Soft Light de retouch dodge & burn.",
+                description: "Tao layer 50% gray kieu legacy: Overlay, ten layer Mekomedia, de retouch dodge & burn.",
                 defaults: {
-                    opacity: 100
+                    opacity: 100,
+                    blendMode: "overlay"
                 },
                 fields: [
-                    { key: "opacity", label: "Opacity", type: "number", min: 1, max: 100, step: 1, suffix: "%" }
+                    { key: "opacity", label: "Opacity", type: "number", min: 1, max: 100, step: 1, suffix: "%" },
+                    {
+                        key: "blendMode",
+                        label: "Blend",
+                        type: "select",
+                        options: [
+                            { value: "overlay", label: "Overlay / Legacy" },
+                            { value: "softLight", label: "Soft Light" }
+                        ]
+                    }
                 ],
                 run: runDodgeBurnGrayLayer
             },
             {
                 id: "db-curves",
                 label: "D&B Curves",
-                description: "Tao hai Curves Dodge/Burn voi mask den de ve chon loc.",
+                description: "Tao hai Curves Dodge/Burn voi mask den; default dung curve point legacy Burn [165,125], Dodge [85,125].",
                 defaults: {
-                    strength: 32
+                    strength: 32,
+                    legacyMode: true
                 },
                 fields: [
-                    { key: "strength", label: "Strength", type: "number", min: 5, max: 100, step: 1 }
+                    { key: "strength", label: "Strength", type: "number", min: 5, max: 100, step: 1 },
+                    { key: "legacyMode", label: "Legacy Curve Points", type: "checkbox" }
                 ],
                 run: runDodgeBurnCurves
             }
@@ -703,16 +792,22 @@ const TOOL_GROUPS = [
             {
                 id: "add-noise",
                 label: "Add Noise",
-                description: "Duplicate layer hien tai va them noise nhe de tao grain/texture.",
+                description: "Tao layer grain kieu legacy: fill mau xam, Add Noise, blur nhe va Soft Light.",
                 defaults: {
-                    amount: 2,
-                    gaussian: true,
-                    monochromatic: true
+                    amount: 25.98,
+                    blurRadius: 1.1,
+                    opacity: 100,
+                    gaussian: false,
+                    monochromatic: false,
+                    legacyMode: true
                 },
                 fields: [
                     { key: "amount", label: "Amount", type: "number", min: 0.1, max: 400, step: 0.1, suffix: "%" },
+                    { key: "blurRadius", label: "Blur", type: "number", min: 0, max: 100, step: 0.1, suffix: "px" },
+                    { key: "opacity", label: "Opacity", type: "number", min: 1, max: 100, step: 1, suffix: "%" },
                     { key: "gaussian", label: "Gaussian", type: "checkbox" },
-                    { key: "monochromatic", label: "Mono", type: "checkbox" }
+                    { key: "monochromatic", label: "Mono", type: "checkbox" },
+                    { key: "legacyMode", label: "Legacy Fill Layer", type: "checkbox" }
                 ],
                 run: runAddNoiseLayer
             },
@@ -760,6 +855,134 @@ const TOOL_GROUPS = [
                     { key: "monochromatic", label: "B&W", type: "checkbox" }
                 ],
                 run: runTexturePro
+            },
+            {
+                id: "check-texture",
+                label: "Check Texture",
+                description: "Tao group Check Layer theo JSX legacy: D&B gray, Skin Blemish, Solarize, Black/White, Invert.",
+                defaults: {
+                    includeDodgeBurn: true,
+                    activeView: "skinBlemish"
+                },
+                fields: [
+                    { key: "includeDodgeBurn", label: "Them D&B", type: "checkbox" },
+                    {
+                        key: "activeView",
+                        label: "Active View",
+                        type: "select",
+                        options: [
+                            { value: "skinBlemish", label: "Skin Blemish" },
+                            { value: "solarize", label: "Solarize" },
+                            { value: "blackWhite", label: "Black/White" },
+                            { value: "invert", label: "Invert" },
+                            { value: "all", label: "Show All" }
+                        ]
+                    }
+                ],
+                run: runCheckTextureLegacy
+            },
+            {
+                id: "check-texture-pro",
+                label: "Check Texture Pro",
+                description: "Tao group Help voi cac layer inspection legacy: Saturation, Color, Hue, Luminosity, Negative, Contract, Test Color...",
+                defaults: {
+                    activeView: "skinBlemish"
+                },
+                fields: [
+                    {
+                        key: "activeView",
+                        label: "Active View",
+                        type: "select",
+                        options: [
+                            { value: "skinBlemish", label: "Skin Blemish" },
+                            { value: "saturation", label: "Saturation" },
+                            { value: "color", label: "Color" },
+                            { value: "hue", label: "Hue" },
+                            { value: "luminosity", label: "Luminosity" },
+                            { value: "negative", label: "Negative" },
+                            { value: "contract", label: "Contract" },
+                            { value: "testColor", label: "Test Color" },
+                            { value: "desaturate", label: "Desaturate" },
+                            { value: "invert", label: "Invert" },
+                            { value: "all", label: "Show All" }
+                        ]
+                    }
+                ],
+                run: runCheckTextureProLegacy
+            }
+        ]
+    },
+    {
+        title: "Legacy Quick Effects",
+        tools: [
+            {
+                id: "dreamy-blur",
+                label: "Mo Ao / Nang Tho",
+                description: "Copy layer, blur manh, blend Soft Light + Screen de tao hieu ung nang tho legacy.",
+                defaults: {
+                    blurRadius: 100,
+                    screenOpacity: 47,
+                    groupOpacity: 100
+                },
+                fields: [
+                    { key: "blurRadius", label: "Blur", type: "number", min: 0.1, max: 250, step: 0.1, suffix: "px" },
+                    { key: "screenOpacity", label: "Screen", type: "number", min: 1, max: 100, step: 1, suffix: "%" },
+                    { key: "groupOpacity", label: "Group", type: "number", min: 1, max: 100, step: 1, suffix: "%" }
+                ],
+                run: runDreamyBlur
+            },
+            {
+                id: "highlight-boost",
+                label: "Highlight Boost",
+                description: "Duplicate layer, Screen, opacity va Gaussian Blur de lam noi vung sang.",
+                defaults: {
+                    brightness: 55,
+                    range: 45
+                },
+                fields: [
+                    { key: "brightness", label: "Brightness", type: "number", min: 1, max: 100, step: 1, suffix: "%" },
+                    { key: "range", label: "Range", type: "number", min: 1, max: 100, step: 1 }
+                ],
+                run: runHighlightBoost
+            },
+            {
+                id: "dark-boost",
+                label: "Dark Boost",
+                description: "Duplicate layer, Multiply, blur va contrast nhe de nhan vung toi theo code bo sung.",
+                defaults: {
+                    strength: 35,
+                    range: 40
+                },
+                fields: [
+                    { key: "strength", label: "Strength", type: "number", min: 1, max: 100, step: 1, suffix: "%" },
+                    { key: "range", label: "Range", type: "number", min: 1, max: 100, step: 1 }
+                ],
+                run: runDarkBoost
+            },
+            {
+                id: "upscale-pro",
+                label: "Upscale Pro",
+                description: "Resize document theo ti le, dung interpolation Preserve Details/Smooth va sharpen nhe.",
+                defaults: {
+                    scale: 2,
+                    method: "preserveDetailsUpscale",
+                    sharpen: true
+                },
+                fields: [
+                    { key: "scale", label: "Scale", type: "number", min: 1, max: 4, step: 0.1, suffix: "x" },
+                    {
+                        key: "method",
+                        label: "Method",
+                        type: "select",
+                        options: [
+                            { value: "preserveDetailsUpscale", label: "Preserve Details 2.0" },
+                            { value: "smooth", label: "Bicubic Smoother" },
+                            { value: "automatic", label: "Automatic" }
+                        ]
+                    },
+                    { key: "sharpen", label: "Smart Sharpen nhe", type: "checkbox" }
+                ],
+                run: runUpscalePro
             }
         ]
     },
@@ -806,6 +1029,21 @@ const FieldControl = ({ field, value, onChange }) => {
                 <textarea
                     className="legacy-textarea"
                     value={value}
+                    placeholder={field.placeholder || ""}
+                    onChange={(event) => onChange(event.target.value)}
+                />
+            </label>
+        );
+    }
+
+    if (field.type === "text") {
+        return (
+            <label className="legacy-field legacy-field-wide">
+                <span>{field.label}</span>
+                <input
+                    className="legacy-input"
+                    type="text"
+                    value={value || ""}
                     placeholder={field.placeholder || ""}
                     onChange={(event) => onChange(event.target.value)}
                 />
